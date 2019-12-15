@@ -4,18 +4,15 @@ const basicAuth = require('basic-auth');
 const crypto = require('crypto');
 const url = require("url");
 
-
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || 'fcea920f7412b5da7be0cf42b8c93759';
-
-
-var proxy = httpProxy.createProxyServer({
-//	target: {
-//		host: '192.168.1.218',
-//		port: 3000
-//	},
-//	ws: true
-});
+var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(' ');
+var http_proxy_hosts = (process.env['http_proxy_hosts'] || '').split(' ');
+var http_proxy_ports = (process.env['http_proxy_ports'] || '').split(' ');
+var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(' ');
+var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(' ');
+var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(' ');
+var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(' ');
 
 var send401 = function(res) {
 	res.statusCode = 401;
@@ -41,37 +38,47 @@ var proxyServer = http.createServer(function (req, res) {
 		send401(res);
 		return;
 	}
-	if(pathname.indexOf('/api/') == 0) {
-		proxy.on('proxyReq', function(proxyReq, req, res, options) {
-			proxyReq.setHeader('Host', '192.168.1.218:8080');
-		});
-		proxy.web(req, res, {
-			target : 'http://192.168.1.218:8080'
-		});
-	} else {
-		proxy.on('proxyReq', function(proxyReq, req, res, options) {
-			proxyReq.setHeader('Host', '192.168.1.218:3000');
-		});
-		proxy.web(req, res, {
-			target : 'http://192.168.1.218:3000'
-		});
+	let have_http_proxy_path = false;
+	for(let h in http_proxy_paths) {
+		if(pathname.indexOf(http_proxy_paths[h]) == 0) {
+			have_http_proxy_path = true;
+			let proxy = httpProxy.createProxyServer({
+				target: {
+					host: http_proxy_hosts[h],
+					port: http_proxy_ports[h]
+				},
+				ws: false
+			});
+			proxy.on('proxyReq', function(proxyReq, req, res, options) {
+				proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
+			});
+			proxy.web(req, res);
+			break;
+		}
 	}
-//	proxy.web(req, res);
+	if(!have_http_proxy_path) {
+		res.writeHead(200, {
+			'Content-Type' : 'text/plain'
+		});
+		res.end('Welcome to my server!');
+	}
 });
 
 proxyServer.on('upgrade', function (req, socket, head) {
 	let pathname = url.parse(req.url).pathname;
-	if(pathname.indexOf('/api/') == 0) {
-		let proxy = new httpProxy.createProxyServer({
-			target : {
-				host : '192.168.1.218',
-				port : '8080'
-			},
-			ws: true
-		});
-		proxy.ws(req, socket, head);
+	for(let w in ws_proxy_paths) {
+		if(pathname.indexOf('/api/') == 0) {
+			let proxy = new httpProxy.createProxyServer({
+				target : {
+					host :  ws_proxy_hosts[w],
+					port :  ws_proxy_ports[w]
+				},
+				ws: true
+			});
+			proxy.ws(req, socket, head);
+			break;
+		}
 	}
-//	proxy.ws(req, socket, head);
 });
 
 proxyServer.listen(80);
