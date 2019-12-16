@@ -19,4 +19,8 @@ ENV username=land007 \
 	ws_proxy_hosts="192.168.1.218" \
 	ws_proxy_ports="8080"
 
+ADD node/start.sh /node_/
+CMD /check.sh /node && /node/start.sh
+
+#docker build -t land007/node-http-proxy:latest .
 #docker rm -f node-http-proxy ; sudo rm -rf ~/docker/node-http-proxy ; docker run -it --privileged --restart=always -v ~/docker/node-http-proxy:/node -p 10080:80 --name node-http-proxy land007/node-http-proxy:latest
