@@ -7,6 +7,7 @@ const url = require("url");
 const fs = require("fs");
 const path = require("path");
 const sep = path.sep;
+const net = require('net');
 
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
@@ -23,6 +24,11 @@ var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(' ');
 var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(' ');
 
 var domainName = process.env['DOMAIN_NAME'] || "voice.qhkly.com"; // e.g., "westus"
+
+var httpPort = 80;
+var httpsPort = 443;
+var netPort = 8443;
+
 const options = {
 	key: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_key.key'),
 	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_chain.crt')
@@ -94,6 +100,26 @@ var requestListener = function (req, res) {
 	}
 };
 
+var netListener = function(socket) {
+	socket.once('data', function(buf){
+		//console.log(buf[0]);
+		// https数据流的第一位是十六进制“16”，转换成十进制就是22
+		var address = buf[0] === 22 ? httpsPort : httpPort;
+		//创建一个指向https或http服务器的链接
+		var proxy = net.createConnection(address, function() {
+			proxy.write(buf);
+			//反向代理的过程，tcp接受的数据交给代理链接，代理链接服务器端返回数据交由socket返回给客户端
+			socket.pipe(proxy).pipe(socket);
+		});
+		proxy.on('error', function(err) {
+			console.log(err);
+		});
+	});
+	socket.on('error', function(err) {
+		console.log(err);
+	});
+};
+
 var upgrade = function (req, socket, head) {
 	var host = req.headers.host;
 	let pathname = url.parse(req.url).pathname;
@@ -118,8 +144,11 @@ var proxyServer = http.createServer(requestListener);
 proxysServer.on('upgrade', upgrade);
 proxyServer.on('upgrade', upgrade);
 
-proxysServer.listen(443);
-console.log("listen 443");
+proxysServer.listen(httpsPort);
+console.log("listen " + httpsPort);
 
-proxyServer.listen(80);
-console.log("listen 80");
+proxyServer.listen(httpPort);
+console.log("listen " + httpPort);
+
+net.createServer(netListener).listen(netPort);
+console.log("listen " + netPort);

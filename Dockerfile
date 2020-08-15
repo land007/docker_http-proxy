@@ -8,7 +8,7 @@ RUN echo $(date "+%Y-%m-%d_%H:%M:%S") >> /.image_times && \
 	echo "land007/http-proxy" > /.image_name
 
 RUN . $HOME/.nvm/nvm.sh && cd / && npm install basic-auth
-ADD proxy.js /node_/server.js
+ADD node/proxy.js /node_/server.js
 ADD node/web-outgoing.js /node_modules/http-proxy/lib/http-proxy/passes/web-outgoing.js
 
 ENV username=land007 \
@@ -30,6 +30,7 @@ RUN sed -i 's/\r//' /node_/start.sh
 ENV DOMAIN_NAME=voice.qhkly.com
 EXPOSE 80
 EXPOSE 443
+EXPOSE 8443
 
 CMD /check.sh /node && /node/start.sh
 
