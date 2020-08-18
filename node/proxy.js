@@ -12,16 +12,16 @@ const net = require('net');
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
 
-var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(' ');
-var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(' ');
-var http_proxy_hosts = (process.env['http_proxy_hosts'] || '').split(' ');
-var http_proxy_ports = (process.env['http_proxy_ports'] || '').split(' ');
-var http_proxy_pretends = (process.env['http_proxy_pretends'] || '').split(' ');
+var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(',');
+var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(',');
+var http_proxy_hosts = (process.env['http_proxy_hosts'] || '').split(',');
+var http_proxy_ports = (process.env['http_proxy_ports'] || '').split(',');
+var http_proxy_pretends = (process.env['http_proxy_pretends'] || '').split(',');
 
-var ws_proxy_domains = (process.env['ws_proxy_domains'] || '').split(' ');
-var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(' ');
-var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(' ');
-var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(' ');
+var ws_proxy_domains = (process.env['ws_proxy_domains'] || '').split(',');
+var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(',');
+var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(',');
+var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(',');
 
 var domainName = process.env['DOMAIN_NAME'] || "voice.qhkly.com"; // e.g., "westus"
 

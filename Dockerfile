@@ -13,10 +13,10 @@ ADD node/web-outgoing.js /node_modules/http-proxy/lib/http-proxy/passes/web-outg
 
 ENV username=land007 \
 	password=fcea920f7412b5da7be0cf42b8c93759 \
-	http_proxy_domains="192.168.1.1:1080 192.168.1.1:1080" \
-	http_proxy_paths="/api/ /" \
-	http_proxy_hosts="192.168.1.218 192.168.1.218" \
-	http_proxy_ports="8080 3000" \
+	http_proxy_domains="192.168.1.1:1080,192.168.1.1:1080" \
+	http_proxy_paths="/api/,/" \
+	http_proxy_hosts="192.168.1.218,192.168.1.218" \
+	http_proxy_ports="8080,3000" \
 	http_proxy_pretends="true true" \
 	ws_proxy_domains="192.168.1.1:1080" \
 	ws_proxy_paths="/api/" \
