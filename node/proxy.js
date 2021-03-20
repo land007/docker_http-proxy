@@ -12,12 +12,14 @@ const net = require('net');
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
 
+var http_proxy_protocols = (process.env['http_proxy_protocols'] || '').split(',');
 var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(',');
 var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(',');
 var http_proxy_hosts = (process.env['http_proxy_hosts'] || '').split(',');
 var http_proxy_ports = (process.env['http_proxy_ports'] || '').split(',');
 var http_proxy_pretends = (process.env['http_proxy_pretends'] || '').split(',');
 
+var ws_proxy_protocols = (process.env['ws_proxy_protocols'] || '').split(',');
 var ws_proxy_domains = (process.env['ws_proxy_domains'] || '').split(',');
 var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(',');
 var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(',');
@@ -65,14 +67,16 @@ var requestListener = function (req, res) {
 	for(let h in http_proxy_paths) {
 		if(pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
 			have_http_proxy_path = true;
-			if(http_proxy_pretends[h] == 'true') {
+			if(http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
 				let proxy = httpProxy.createProxyServer({
 				    hostRewrite: http_proxy_hosts[h],
 				    autoRewrite: true,
 					target: {
 						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h]
+						port: http_proxy_ports[h],
+						protocol: http_proxy_protocols[h]? http_proxy_protocols[h]: "http:"
 					},
+					secure: false,
 					ws: false
 				});
 				proxy.on('proxyReq', function(proxyReq, req, res, options) {
@@ -83,8 +87,10 @@ var requestListener = function (req, res) {
 				let proxy = httpProxy.createProxyServer({
 					target: {
 						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h]
+						port: http_proxy_ports[h],
+						protocol: http_proxy_protocols[h]? http_proxy_protocols[h]: "http:"
 					},
+					secure: false,
 					ws: false
 				});
 				proxy.web(req, res);
@@ -128,8 +134,10 @@ var upgrade = function (req, socket, head) {
 			let proxy = new httpProxy.createProxyServer({
 				target : {
 					host :  ws_proxy_hosts[w],
-					port :  ws_proxy_ports[w]
+					port :  ws_proxy_ports[w],
+					protocol: ws_proxy_protocols[h]? ws_proxy_protocols[h]: "ws:"
 				},
+				secure: false,
 				ws: true
 			});
 			proxy.ws(req, socket, head);
