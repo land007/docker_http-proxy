@@ -135,7 +135,7 @@ var upgrade = function (req, socket, head) {
 				target : {
 					host :  ws_proxy_hosts[w],
 					port :  ws_proxy_ports[w],
-					protocol: ws_proxy_protocols[h]? ws_proxy_protocols[h]: "ws:"
+					protocol: ws_proxy_protocols[w]? ws_proxy_protocols[w]: "ws:"
 				},
 				secure: false,
 				ws: true
