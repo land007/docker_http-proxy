@@ -11,8 +11,10 @@ RUN . $HOME/.nvm/nvm.sh && cd / && npm install basic-auth
 ADD node/proxy.js /node_/server.js
 ADD node/web-outgoing.js /node_modules/http-proxy/lib/http-proxy/passes/web-outgoing.js
 
-ENV username=land007 \
-	password=fcea920f7412b5da7be0cf42b8c93759 \
+ENV username="land007" \
+	password="fcea920f7412b5da7be0cf42b8c93759" \
+	usernames="," \
+	passwords="," \
 	http_proxy_protocols="http:,https:" \
 	http_proxy_domains="192.168.1.1:1080,192.168.1.1:1443" \
 	http_proxy_paths="/api/,/" \
@@ -42,6 +44,8 @@ CMD /check.sh /node && /node/start.sh
 
 #docker build -t land007/http-proxy:latest .
 #> docker buildx build --platform linux/amd64,linux/arm64/v8,linux/arm/v7 -t land007/http-proxy --push .
+
+#docker save -o http-proxy.tar land007/http-proxy:latest
 
 #[root@bogon Desktop]# systemctl stop firewalld.service
 #[root@bogon Desktop]# systemctl start firewalld.service

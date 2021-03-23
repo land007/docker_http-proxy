@@ -11,6 +11,8 @@ const net = require('net');
 
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
+var usernames = (process.env['usernames'] || '').split(',');
+var passwords = (process.env['passwords'] || '').split(',');
 
 var http_proxy_protocols = (process.env['http_proxy_protocols'] || '').split(',');
 var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(',');
@@ -43,29 +45,31 @@ var send401 = function(res) {
 };
 
 var requestListener = function (req, res) {
-	var host = req.headers.host;
+	let host = req.headers.host;
 	let pathname = url.parse(req.url).pathname;
-	if(password != '') {
-		let user = basicAuth(req);
-		if (!user) {
-			send401(res);
-			return;
-		}
-		let md5 = crypto.createHash('md5');
-		if (user.pass === undefined) {
-			md5.update('undefined');
-		} else {
-			md5.update(user.pass);
-		}
-		let pass = md5.digest('hex');
-		if (user.name !== username || pass !== password) {
-			send401(res);
-			return;
-		}
-	}
 	let have_http_proxy_path = false;
 	for(let h in http_proxy_paths) {
 		if(pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
+			let _username = usernames[h] ? usernames[h] : username;
+			let _password = passwords[h] ? passwords[h] : password;
+			if(_password != '') {
+				let user = basicAuth(req);
+				if (!user) {
+					send401(res);
+					return;
+				}
+				let md5 = crypto.createHash('md5');
+				if (user.pass === undefined) {
+					md5.update('undefined');
+				} else {
+					md5.update(user.pass);
+				}
+				let pass = md5.digest('hex');
+				if (user.name !== _username || pass !== _password) {
+					send401(res);
+					return;
+				}
+			}
 			have_http_proxy_path = true;
 			if(http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
 				let proxy = httpProxy.createProxyServer({
