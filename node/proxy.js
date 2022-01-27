@@ -33,7 +33,39 @@ var httpPort = 80;
 var httpsPort = 443;
 var netPort = 8443;
 
+//function to pick out the key + certs dynamically based on the domain name
+const getSecureContext = function(domain) {
+    return crypto.createCredentials({
+        key:  fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_key.key'),
+        cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')}).context;
+}
+
+//read them into memory
+const secureContext = {
+    'www.gjxt.xyz': getSecureContext('www.gjxt.xyz')
+}
+
+secureContext[domainName] = getSecureContext(domainName);
+
 const options = {
+	SNICallback: function(domain, cb) {
+		if (secureContext[domain]) {
+			if (cb) {
+				cb(null, secureContext[domain]);
+			} else {
+				// compatibility for older versions of node
+				return secureContext[domain];
+			}
+		} else {
+            if (cb) {
+				cb(null, secureContext['www.gjxt.xyz']);
+			} else {
+				// compatibility for older versions of node
+				return secureContext['www.gjxt.xyz'];
+			}
+			//throw new Error('No keys/certificates for domain requested');
+		}
+	},
 	key: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_key.key'),
 	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_chain.crt')
 };
