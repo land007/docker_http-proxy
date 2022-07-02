@@ -5,6 +5,7 @@ const basicAuth = require('basic-auth');
 const crypto = require('crypto');
 const url = require("url");
 const fs = require("fs");
+const tls = require("tls");
 const path = require("path");
 const sep = path.sep;
 const net = require('net');
@@ -35,9 +36,16 @@ var netPort = 8443;
 
 //function to pick out the key + certs dynamically based on the domain name
 const getSecureContext = function(domain) {
-    return crypto.createCredentials({
+	let config = {
         key:  fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_key.key'),
-        cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')}).context;
+        cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')};
+	let credentials;
+	if (tls.createSecureContext) {
+	  credentials = tls.createSecureContext(config);
+	} else {
+	  credentials = crypto.createCredentials(config);
+	}
+    return credentials.context;
 }
 
 //read them into memory
@@ -66,8 +74,8 @@ const options = {
 			//throw new Error('No keys/certificates for domain requested');
 		}
 	},
-	key: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_key.key'),
-	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domainName + '_chain.crt')
+	key: fs.readFileSync(__dirname + sep + 'cert' + sep + 'www.gjxt.xyz' + '_key.key'),
+	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + 'www.gjxt.xyz' + '_chain.crt')
 };
 
 var send401 = function(res) {

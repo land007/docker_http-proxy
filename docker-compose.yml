@@ -1,0 +1,41 @@
+version: "2.1"
+networks:
+  internal_network:
+services:
+  724_http-proxy:
+    restart: always
+    networks:
+      - internal_network
+    image: land007/http-proxy:latest
+    container_name: 724_http-proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "300k"
+        max-file: "3"
+    volumes:
+      - ./cert:/node_/cert:cached
+    environment:
+      - "DOMAIN_NAME=724.msa.gov.cn"
+      - "username=gjxt"
+      - "password="
+      - "http_proxy_domains=724.msa.gov.cn"
+      - "http_proxy_protocols=https:"
+      - "http_proxy_paths=/"
+      - "http_proxy_hosts=im1c5366d.7x24cc.com"
+      - "http_proxy_ports=443"
+      - "http_proxy_pretends=true"
+      - "ws_proxy_domains=724.msa.gov.cn"
+      - "ws_proxy_protocols=wss:"
+      - "ws_proxy_paths=/"
+      - "ws_proxy_hosts=yw.msa.gov.cn"
+      - "ws_proxy_ports=443"
+    expose:
+      - "20022"
+      - "443"
+      - "80"
+      - "8443"
+    ports:
+      - "443:443"
+      - "80:80"
+      - "8443:8443"
