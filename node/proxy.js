@@ -109,27 +109,32 @@ const requestListener = function(req, res) {
 		let pathname = url.parse(req.url).pathname;
 		let _session = req.session.all();
 		let _token = _session._token;
-		console.log('_token', _token);
+		//console.log('_token', _token);
 		let have_http_proxy_path = false;
 		for (let h in http_proxy_paths) {
 			if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
 				let login_name = req.session.get('login_name');
-				console.log('login_name', login_name);
+				//console.log('login_name', login_name);
 				if(login_name === undefined) {// 没有登录
 					let _usernames = (usernames[h] ? usernames[h] : username).split('|');
 					let _passwords = (passwords[h] ? passwords[h] : password).split('|');
-					if (_passwords.length == 1 && _passwords[0] != '') {
+					//console.log('_usernames', _usernames);
+					//console.log('_passwords', _passwords);
+					if (!(_passwords.length == 1 && _passwords[0] == '')) {
 						let users = {};
 						for (let _p in _passwords) {
 							let _username = _usernames[_p];
 							let _password = _passwords[_p];
 							users[_username] = _password;
 						}
+						//console.log('users', users);
 						let user = basicAuth(req);
+						//console.log('user', user);
 						if (!user) {
 							send401(res);
 							return;
 						}
+						//console.log('users[user.name]', users[user.name]);
 						if (users[user.name] === undefined) {
 							send401(res);
 							return;
@@ -141,6 +146,7 @@ const requestListener = function(req, res) {
 							md5.update(user.pass);
 						}
 						let pass = md5.digest('hex');
+						//console.log('pass', pass);
 						if (pass !== users[user.name]) {
 							send401(res);
 							return;
@@ -158,9 +164,10 @@ const requestListener = function(req, res) {
 					}
 				} else {// 登录过
 					let tokens = _userSession[login_name];
-					console.log('tokens', tokens);
+					//console.log('tokens', tokens);
 					if(!tokens.includes(_token)){
 						send401(res);
+						req.session.forget('login_name');
 						return;
 					}
 				}
