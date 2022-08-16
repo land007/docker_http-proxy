@@ -9,6 +9,14 @@ const tls = require("tls");
 const path = require("path");
 const sep = path.sep;
 const net = require('net');
+const NodeSession = require('node-session');
+
+var nodeSession = new NodeSession({
+	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
+	'lifetime': 24 * 60 * 60 * 1000,
+	//'secure': true,
+	'encrypt': true
+});
 
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
@@ -37,20 +45,21 @@ var netPort = 8443;
 //function to pick out the key + certs dynamically based on the domain name
 const getSecureContext = function(domain) {
 	let config = {
-        key:  fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_key.key'),
-        cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')};
+		key: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_key.key'),
+		cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')
+	};
 	let credentials;
 	if (tls.createSecureContext) {
-	  credentials = tls.createSecureContext(config);
+		credentials = tls.createSecureContext(config);
 	} else {
-	  credentials = crypto.createCredentials(config);
+		credentials = crypto.createCredentials(config);
 	}
-    return credentials.context;
+	return credentials.context;
 }
 
 //read them into memory
 const secureContext = {
-    'www.gjxt.xyz': getSecureContext('www.gjxt.xyz')
+	'www.gjxt.xyz': getSecureContext('www.gjxt.xyz')
 }
 
 secureContext[domainName] = getSecureContext(domainName);
@@ -65,7 +74,7 @@ const options = {
 				return secureContext[domain];
 			}
 		} else {
-            if (cb) {
+			if (cb) {
 				cb(null, secureContext['www.gjxt.xyz']);
 			} else {
 				// compatibility for older versions of node
@@ -78,85 +87,131 @@ const options = {
 	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + 'www.gjxt.xyz' + '_chain.crt')
 };
 
-var send401 = function(res) {
+const getClientIp = function(req) {
+	return req.headers['x-forwarded-for'] ||
+		req.connection.remoteAddress ||
+		req.socket.remoteAddress ||
+		req.connection.socket.remoteAddress;
+};
+
+const send401 = function(res) {
 	res.statusCode = 401;
 	res.setHeader('WWW-Authenticate', 'Basic realm=Authorization Required');
 	res.end('<html><body>Need some creds son</body></html>');
 };
 
-var requestListener = function (req, res) {
-	let host = req.headers.host;
-	let pathname = url.parse(req.url).pathname;
-	let have_http_proxy_path = false;
-	for(let h in http_proxy_paths) {
-		if(pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
-			let _username = usernames[h] ? usernames[h] : username;
-			let _password = passwords[h] ? passwords[h] : password;
-			if(_password != '') {
-				let user = basicAuth(req);
-				if (!user) {
-					send401(res);
-					return;
+const _userSession = {};
+
+const requestListener = function(req, res) {
+	nodeSession.startSession(req, res, function() {
+		//let ip = getClientIp(req);
+		let host = req.headers.host;
+		let pathname = url.parse(req.url).pathname;
+		let _session = req.session.all();
+		let _token = _session._token;
+		console.log('_token', _token);
+		let have_http_proxy_path = false;
+		for (let h in http_proxy_paths) {
+			if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
+				let login_name = req.session.get('login_name');
+				console.log('login_name', login_name);
+				if(login_name === undefined) {// 没有登录
+					let _usernames = (usernames[h] ? usernames[h] : username).split('|');
+					let _passwords = (passwords[h] ? passwords[h] : password).split('|');
+					if (_passwords.length == 1 && _passwords[0] != '') {
+						let users = {};
+						for (let _p in _passwords) {
+							let _username = _usernames[_p];
+							let _password = _passwords[_p];
+							users[_username] = _password;
+						}
+						let user = basicAuth(req);
+						if (!user) {
+							send401(res);
+							return;
+						}
+						if (users[user.name] === undefined) {
+							send401(res);
+							return;
+						}
+						let md5 = crypto.createHash('md5');
+						if (user.pass === undefined) {
+							md5.update('undefined');
+						} else {
+							md5.update(user.pass);
+						}
+						let pass = md5.digest('hex');
+						if (pass !== users[user.name]) {
+							send401(res);
+							return;
+						}
+						req.session.put('login_name', user.name);
+						let _session = req.session.all();
+						let _token = _session._token;
+						if(_userSession[user.name] === undefined) {
+							_userSession[user.name] = [];
+						}
+						_userSession[user.name].unshift(_token);
+						if(_userSession[user.name].length > 1) {
+							_userSession[user.name].pop();
+						}
+					}
+				} else {// 登录过
+					let tokens = _userSession[login_name];
+					console.log('tokens', tokens);
+					if(!tokens.includes(_token)){
+						send401(res);
+						return;
+					}
 				}
-				let md5 = crypto.createHash('md5');
-				if (user.pass === undefined) {
-					md5.update('undefined');
+				have_http_proxy_path = true;
+				if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
+					let proxy = httpProxy.createProxyServer({
+						hostRewrite: http_proxy_hosts[h],
+						autoRewrite: true,
+						target: {
+							host: http_proxy_hosts[h],
+							port: http_proxy_ports[h],
+							protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
+						},
+						secure: false,
+						ws: false
+					});
+					proxy.on('proxyReq', function(proxyReq, req, res, options) {
+						proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
+					});
+					proxy.web(req, res);
 				} else {
-					md5.update(user.pass);
+					let proxy = httpProxy.createProxyServer({
+						target: {
+							host: http_proxy_hosts[h],
+							port: http_proxy_ports[h],
+							protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
+						},
+						secure: false,
+						ws: false
+					});
+					proxy.web(req, res);
 				}
-				let pass = md5.digest('hex');
-				if (user.name !== _username || pass !== _password) {
-					send401(res);
-					return;
-				}
+				break;
 			}
-			have_http_proxy_path = true;
-			if(http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
-				let proxy = httpProxy.createProxyServer({
-				    hostRewrite: http_proxy_hosts[h],
-				    autoRewrite: true,
-					target: {
-						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h],
-						protocol: http_proxy_protocols[h]? http_proxy_protocols[h]: "http:"
-					},
-					secure: false,
-					ws: false
-				});
-				proxy.on('proxyReq', function(proxyReq, req, res, options) {
-					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
-				});
-				proxy.web(req, res);
-			} else {
-				let proxy = httpProxy.createProxyServer({
-					target: {
-						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h],
-						protocol: http_proxy_protocols[h]? http_proxy_protocols[h]: "http:"
-					},
-					secure: false,
-					ws: false
-				});
-				proxy.web(req, res);
-			}
-			break;
 		}
-	}
-	if(!have_http_proxy_path) {
-		res.writeHead(200, {
-			'Content-Type' : 'text/plain'
-		});
-		res.end('Welcome to my server!');
-	}
+		if (!have_http_proxy_path) {
+			res.writeHead(200, {
+				'Content-Type': 'text/plain'
+			});
+			res.end('Welcome to my server!');
+		}
+	});
 };
 
-var netListener = function(socket) {
-	socket.once('data', function(buf){
+const netListener = function(socket) {
+	socket.once('data', function(buf) {
 		//console.log(buf[0]);
 		// https数据流的第一位是十六进制“16”，转换成十进制就是22
-		var address = buf[0] === 22 ? httpsPort : httpPort;
+		let address = buf[0] === 22 ? httpsPort : httpPort;
 		//创建一个指向https或http服务器的链接
-		var proxy = net.createConnection(address, function() {
+		let proxy = net.createConnection(address, function() {
 			proxy.write(buf);
 			//反向代理的过程，tcp接受的数据交给代理链接，代理链接服务器端返回数据交由socket返回给客户端
 			socket.pipe(proxy).pipe(socket);
@@ -170,16 +225,16 @@ var netListener = function(socket) {
 	});
 };
 
-var upgrade = function (req, socket, head) {
-	var host = req.headers.host;
+const upgrade = function(req, socket, head) {
+	let host = req.headers.host;
 	let pathname = url.parse(req.url).pathname;
-	for(let w in ws_proxy_paths) {
-		if(pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
+	for (let w in ws_proxy_paths) {
+		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
 			let proxy = new httpProxy.createProxyServer({
-				target : {
-					host :  ws_proxy_hosts[w],
-					port :  ws_proxy_ports[w],
-					protocol: ws_proxy_protocols[w]? ws_proxy_protocols[w]: "ws:"
+				target: {
+					host: ws_proxy_hosts[w],
+					port: ws_proxy_ports[w],
+					protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
 				},
 				secure: false,
 				ws: true
