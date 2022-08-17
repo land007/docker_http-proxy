@@ -22,7 +22,7 @@ var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
 var usernames = (process.env['usernames'] || '').split(',');
 var passwords = (process.env['passwords'] || '').split(',');
-
+var max_session = parseInt(process.env['max_session'] || '0');
 var http_proxy_protocols = (process.env['http_proxy_protocols'] || '').split(',');
 var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(',');
 var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(',');
@@ -94,6 +94,10 @@ const getClientIp = function(req) {
 		req.connection.socket.remoteAddress;
 };
 
+const consoleLog = function(...log) {
+	console.log(log);
+};
+
 const send401 = function(res) {
 	res.statusCode = 401;
 	res.setHeader('WWW-Authenticate', 'Basic realm=Authorization Required');
@@ -102,119 +106,133 @@ const send401 = function(res) {
 
 const _userSession = {};
 
-const requestListener = function(req, res) {
-	nodeSession.startSession(req, res, function() {
-		//let ip = getClientIp(req);
-		let host = req.headers.host;
-		let pathname = url.parse(req.url).pathname;
+const _requestListener = function(req, res) {
+	//let ip = getClientIp(req);
+	let host = req.headers.host;
+	let pathname = url.parse(req.url).pathname;
+	let _token;
+	if(max_session > 0) {
 		let _session = req.session.all();
-		let _token = _session._token;
-		//console.log('_token', _token);
-		let have_http_proxy_path = false;
-		for (let h in http_proxy_paths) {
-			if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
-				let login_name = req.session.get('login_name');
-				//console.log('login_name', login_name);
-				if(login_name === undefined) {// 没有登录
-					let _usernames = (usernames[h] ? usernames[h] : username).split('|');
-					let _passwords = (passwords[h] ? passwords[h] : password).split('|');
-					//console.log('_usernames', _usernames);
-					//console.log('_passwords', _passwords);
-					if (!(_passwords.length == 1 && _passwords[0] == '')) {
-						let users = {};
-						for (let _p in _passwords) {
-							let _username = _usernames[_p];
-							let _password = _passwords[_p];
-							users[_username] = _password;
-						}
-						//console.log('users', users);
-						let user = basicAuth(req);
-						//console.log('user', user);
-						if (!user) {
-							send401(res);
-							return;
-						}
-						//console.log('users[user.name]', users[user.name]);
-						if (users[user.name] === undefined) {
-							send401(res);
-							return;
-						}
-						let md5 = crypto.createHash('md5');
-						if (user.pass === undefined) {
-							md5.update('undefined');
-						} else {
-							md5.update(user.pass);
-						}
-						let pass = md5.digest('hex');
-						//console.log('pass', pass);
-						if (pass !== users[user.name]) {
-							send401(res);
-							return;
-						}
+		_token = _session._token;
+		consoleLog('_token', _token);
+	}
+	let have_http_proxy_path = false;
+	for (let h in http_proxy_paths) {
+		if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
+			let login_name;
+			if(max_session > 0) {
+				login_name = req.session.get('login_name');
+				consoleLog('login_name', login_name);
+			}
+			if (login_name === undefined) {// 没有登录
+				let _usernames = (usernames[h] ? usernames[h] : username).split('|');
+				let _passwords = (passwords[h] ? passwords[h] : password).split('|');
+				consoleLog('_usernames', _usernames);
+				consoleLog('_passwords', _passwords);
+				if (!(_passwords.length == 1 && _passwords[0] == '')) {
+					let users = {};
+					for (let _p in _passwords) {
+						let _username = _usernames[_p];
+						let _password = _passwords[_p];
+						users[_username] = _password;
+					}
+					consoleLog('users', users);
+					let user = basicAuth(req);
+					consoleLog('user', user);
+					if (!user) {
+						send401(res);
+						return;
+					}
+					consoleLog('users[user.name]', users[user.name]);
+					if (users[user.name] === undefined) {
+						send401(res);
+						return;
+					}
+					let md5 = crypto.createHash('md5');
+					if (user.pass === undefined) {
+						md5.update('undefined');
+					} else {
+						md5.update(user.pass);
+					}
+					let pass = md5.digest('hex');
+					consoleLog('pass', pass);
+					if (pass !== users[user.name]) {
+						send401(res);
+						return;
+					}
+					if(max_session > 0) {
 						req.session.put('login_name', user.name);
-						let _session = req.session.all();
-						let _token = _session._token;
-						if(_userSession[user.name] === undefined) {
+						if (_userSession[user.name] === undefined) {
 							_userSession[user.name] = [];
 						}
 						_userSession[user.name].unshift(_token);
-						if(_userSession[user.name].length > 1) {
+						if (_userSession[user.name].length > max_session) {
 							_userSession[user.name].pop();
 						}
 					}
-				} else {// 登录过
-					let tokens = _userSession[login_name];
-					//console.log('tokens', tokens);
-					if(!tokens.includes(_token)){
-						send401(res);
-						req.session.forget('login_name');
-						return;
-					}
 				}
-				have_http_proxy_path = true;
-				if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
-					let proxy = httpProxy.createProxyServer({
-						hostRewrite: http_proxy_hosts[h],
-						autoRewrite: true,
-						target: {
-							host: http_proxy_hosts[h],
-							port: http_proxy_ports[h],
-							protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
-						},
-						secure: false,
-						ws: false
-					});
-					proxy.on('proxyReq', function(proxyReq, req, res, options) {
-						proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
-					});
-					proxy.web(req, res);
-				} else {
-					let proxy = httpProxy.createProxyServer({
-						target: {
-							host: http_proxy_hosts[h],
-							port: http_proxy_ports[h],
-							protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
-						},
-						secure: false,
-						ws: false
-					});
-					proxy.web(req, res);
+			} else {// 登录过
+				let tokens = _userSession[login_name];
+				consoleLog('tokens', tokens);
+				if (!tokens.includes(_token)) {
+					req.session.forget('login_name');
+					send401(res);
+					return;
 				}
-				break;
 			}
+			have_http_proxy_path = true;
+			if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
+				let proxy = httpProxy.createProxyServer({
+					hostRewrite: http_proxy_hosts[h],
+					autoRewrite: true,
+					target: {
+						host: http_proxy_hosts[h],
+						port: http_proxy_ports[h],
+						protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
+					},
+					secure: false,
+					ws: false
+				});
+				proxy.on('proxyReq', function(proxyReq, req, res, options) {
+					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
+				});
+				proxy.web(req, res);
+			} else {
+				let proxy = httpProxy.createProxyServer({
+					target: {
+						host: http_proxy_hosts[h],
+						port: http_proxy_ports[h],
+						protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
+					},
+					secure: false,
+					ws: false
+				});
+				proxy.web(req, res);
+			}
+			break;
 		}
-		if (!have_http_proxy_path) {
-			res.writeHead(200, {
-				'Content-Type': 'text/plain'
-			});
-			res.end('Welcome to my server!');
-		}
-	});
+	}
+	if (!have_http_proxy_path) {
+		res.writeHead(200, {
+			'Content-Type': 'text/plain'
+		});
+		res.end('Welcome to my server!');
+	}
+};
+
+const requestListener = function(req, res) {
+	if(max_session > 0) {
+		nodeSession.startSession(req, res, function() {
+			_requestListener(req, res);
+		});
+	} else {
+		_requestListener(req, res);
+	}
 };
 
 const netListener = function(socket) {
 	socket.once('data', function(buf) {
-		//console.log(buf[0]);
+		consoleLog(buf[0]);
 		// https数据流的第一位是十六进制“16”，转换成十进制就是22
 		let address = buf[0] === 22 ? httpsPort : httpPort;
 		//创建一个指向https或http服务器的链接
