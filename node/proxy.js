@@ -10,6 +10,8 @@ const path = require("path");
 const sep = path.sep;
 const net = require('net');
 const NodeSession = require('node-session');
+const util = require('util');
+const readFile = util.promisify(fs.readFile);
 
 var nodeSession = new NodeSession({
 	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
@@ -17,6 +19,18 @@ var nodeSession = new NodeSession({
 	//'secure': true,
 	'encrypt': true
 });
+
+var readJson = async function(filename) {
+	try {
+		let data = await readFile(filename, 'utf-8'); //put the resolved results of readFilePr into contents
+		let json = JSON.parse(data.toString());
+		//consoleLog(json);
+		return json;
+	} catch (err) { //if readFilePr returns errors, we catch it here
+		console.error('⛔ We could not read', filename)
+		console.error('⛔ This is the error: ', err);
+	}
+};
 
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
@@ -95,7 +109,7 @@ const getClientIp = function(req) {
 };
 
 const consoleLog = function(...log) {
-	console.log(log);
+	//console.log(log);
 };
 
 const send401 = function(res) {
@@ -106,12 +120,19 @@ const send401 = function(res) {
 
 const _userSession = {};
 
-const _requestListener = function(req, res) {
+var users_list;
+const init = async function() {
+	users_list = await readJson('users_list.json');
+};
+init();
+setInterval(init, 5000);
+
+const _requestListener = async function(req, res) {
 	//let ip = getClientIp(req);
 	let host = req.headers.host;
 	let pathname = url.parse(req.url).pathname;
 	let _token;
-	if(max_session > 0) {
+	if (max_session > 0) {
 		let _session = req.session.all();
 		_token = _session._token;
 		consoleLog('_token', _token);
@@ -120,22 +141,30 @@ const _requestListener = function(req, res) {
 	for (let h in http_proxy_paths) {
 		if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
 			let login_name;
-			if(max_session > 0) {
+			if (max_session > 0) {
 				login_name = req.session.get('login_name');
 				consoleLog('login_name', login_name);
 			}
 			if (login_name === undefined) {// 没有登录
-				let _usernames = (usernames[h] ? usernames[h] : username).split('|');
-				let _passwords = (passwords[h] ? passwords[h] : password).split('|');
-				consoleLog('_usernames', _usernames);
-				consoleLog('_passwords', _passwords);
-				if (!(_passwords.length == 1 && _passwords[0] == '')) {
-					let users = {};
-					for (let _p in _passwords) {
-						let _username = _usernames[_p];
-						let _password = _passwords[_p];
-						users[_username] = _password;
+				let users;
+				if (users_list !== undefined) {
+					users = users_list[h];
+				}
+				if (users === undefined) {
+					let _usernames = (usernames[h] ? usernames[h] : username).split('|');
+					let _passwords = (passwords[h] ? passwords[h] : password).split('|');
+					consoleLog('_usernames', _usernames);
+					consoleLog('_passwords', _passwords);
+					if (!(_passwords.length == 1 && _passwords[0] == '')) {
+						users = {};
+						for (let _p in _passwords) {
+							let _username = _usernames[_p];
+							let _password = _passwords[_p];
+							users[_username] = _password;
+						}
 					}
+				}
+				if (users !== undefined) {
 					consoleLog('users', users);
 					let user = basicAuth(req);
 					consoleLog('user', user);
@@ -160,7 +189,7 @@ const _requestListener = function(req, res) {
 						send401(res);
 						return;
 					}
-					if(max_session > 0) {
+					if (max_session > 0) {
 						req.session.put('login_name', user.name);
 						if (_userSession[user.name] === undefined) {
 							_userSession[user.name] = [];
@@ -221,7 +250,7 @@ const _requestListener = function(req, res) {
 };
 
 const requestListener = function(req, res) {
-	if(max_session > 0) {
+	if (max_session > 0) {
 		nodeSession.startSession(req, res, function() {
 			_requestListener(req, res);
 		});
@@ -242,11 +271,11 @@ const netListener = function(socket) {
 			socket.pipe(proxy).pipe(socket);
 		});
 		proxy.on('error', function(err) {
-			console.log(err);
+			consoleLog(err);
 		});
 	});
 	socket.on('error', function(err) {
-		console.log(err);
+		consoleLog(err);
 	});
 };
 
@@ -277,10 +306,10 @@ proxysServer.on('upgrade', upgrade);
 proxyServer.on('upgrade', upgrade);
 
 proxysServer.listen(httpsPort);
-console.log("listen " + httpsPort);
+consoleLog("listen " + httpsPort);
 
 proxyServer.listen(httpPort);
-console.log("listen " + httpPort);
+consoleLog("listen " + httpPort);
 
 net.createServer(netListener).listen(netPort);
-console.log("listen " + netPort);
+consoleLog("listen " + netPort);
