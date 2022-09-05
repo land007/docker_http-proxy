@@ -164,7 +164,7 @@ const _requestListener = async function(req, res) {
 						}
 					}
 				}
-				if (users !== undefined) {
+				if (users !== undefined && users !== null) {
 					consoleLog('users', users);
 					let user = basicAuth(req);
 					consoleLog('user', user);
@@ -203,7 +203,7 @@ const _requestListener = async function(req, res) {
 			} else {// 登录过
 				let tokens = _userSession[login_name];
 				consoleLog('tokens', tokens);
-				if (!tokens.includes(_token)) {
+				if (tokens === undefined || !tokens.includes(_token)) {
 					req.session.forget('login_name');
 					send401(res);
 					return;
