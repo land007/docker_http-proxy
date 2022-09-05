@@ -7,7 +7,7 @@ RUN echo $(date "+%Y-%m-%d_%H:%M:%S") >> /.image_times && \
 	echo "land007/http-proxy" >> /.image_names && \
 	echo "land007/http-proxy" > /.image_name
 
-RUN . $HOME/.nvm/nvm.sh && cd / && npm install basic-auth
+RUN . $HOME/.nvm/nvm.sh && cd / && npm install basic-auth node-session
 ADD node/proxy.js /node_/server.js
 ADD node/web-outgoing.js /node_modules/http-proxy/lib/http-proxy/passes/web-outgoing.js
 
@@ -15,6 +15,7 @@ ENV username="land007" \
 	password="fcea920f7412b5da7be0cf42b8c93759" \
 	usernames="," \
 	passwords="," \
+	max_session="0" \
 	http_proxy_protocols="http:,https:" \
 	http_proxy_domains="192.168.1.1:1080,192.168.1.1:1443" \
 	http_proxy_paths="/api/,/" \
@@ -30,6 +31,7 @@ ENV username="land007" \
 ADD node/start.sh /node_/
 ADD node/cert /node_/cert
 RUN sed -i 's/\r//' /node_/start.sh
+ADD node/users_list.json /node_/users_list.json
 
 ENV DOMAIN_NAME=voice.qhkly.com
 EXPOSE 80
