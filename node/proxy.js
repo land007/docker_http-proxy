@@ -270,7 +270,7 @@ const _requestListener = async function(req, res) {
 		res.writeHead(200, {
 			'Content-Type': 'text/plain'
 		});
-		res.end('Welcome to my server!');
+		res.end('Welcome to my server! host:' + host + ' pathname:' + pathname);
 	}
 };
 
