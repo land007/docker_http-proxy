@@ -15,6 +15,7 @@ services:
         max-file: "3"
     volumes:
       - ./cert:/node_/cert:cached
+      - ./users_list.json:/node_/users_list.json
     environment:
       - "DOMAIN_NAME=724.msa.gov.cn"
       - "username=gjxt"

@@ -49,6 +49,7 @@ var ws_proxy_domains = (process.env['ws_proxy_domains'] || '').split(',');
 var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(',');
 var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(',');
 var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(',');
+var ws_proxy_pretends = (process.env['ws_proxy_pretends'] || '').split(',');
 
 var domainName = process.env['DOMAIN_NAME'] || "voice.qhkly.com"; // e.g., "westus"
 
@@ -216,7 +217,9 @@ const check = function(req, h, _token) {
 const _requestListener = async function(req, res) {
 	//let ip = getClientIp(req);
 	let host = req.headers.host;
+    console.log('_requestListener host', host);
 	let pathname = url.parse(req.url).pathname;
+    console.log('_requestListener pathname', pathname);
 	let _token;
 	if (max_session > 0) {
 		let _session = req.session.all();
@@ -236,8 +239,9 @@ const _requestListener = async function(req, res) {
 			have_http_proxy_path = true;
 			if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
 				let proxy = httpProxy.createProxyServer({
-					hostRewrite: http_proxy_hosts[h],
-					autoRewrite: true,
+	                autoRewrite: true,
+	                hostRewrite: true,
+	                changeOrigin: true,
 					target: {
 						host: http_proxy_hosts[h],
 						port: http_proxy_ports[h],
@@ -246,9 +250,9 @@ const _requestListener = async function(req, res) {
 					secure: false,
 					ws: false
 				});
-				proxy.on('proxyReq', function(proxyReq, req, res, options) {
-					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
-				});
+//				proxy.on('proxyReq', function(proxyReq, req, res, options) {
+//					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
+//				});
 				proxy.web(req, res);
 			} else {
 				let proxy = httpProxy.createProxyServer({
@@ -316,7 +320,9 @@ const upgrade = function(req, socket, head) {
 
 const _upgrade = function(req, socket, head) {
 	let host = req.headers.host;
+    console.log('_upgrade host', host);
 	let pathname = url.parse(req.url).pathname;
+    console.log('_upgrade pathname', pathname);
 	let _token;
 	if (max_session > 0) {
 		let _session = req.session.all();
@@ -330,16 +336,32 @@ const _upgrade = function(req, socket, head) {
 			return;
 		}
 		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
-			let proxy = new httpProxy.createProxyServer({
-				target: {
-					host: ws_proxy_hosts[w],
-					port: ws_proxy_ports[w],
-					protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
-				},
-				secure: false,
-				ws: true
-			});
-			proxy.ws(req, socket, head);
+			if (ws_proxy_pretends[w] && ws_proxy_pretends[w] == 'true') {
+				let proxy = new httpProxy.createProxyServer({
+	                autoRewrite: true,
+	                hostRewrite: true,
+	                changeOrigin: true,
+					target: {
+						host: ws_proxy_hosts[w],
+						port: ws_proxy_ports[w],
+						protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
+					},
+					secure: false,
+					ws: true
+				});
+				proxy.ws(req, socket, head);
+			} else {
+				let proxy = new httpProxy.createProxyServer({
+					target: {
+						host: ws_proxy_hosts[w],
+						port: ws_proxy_ports[w],
+						protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
+					},
+					secure: false,
+					ws: true
+				});
+				proxy.ws(req, socket, head);
+			}
 			break;
 		}
 	}
