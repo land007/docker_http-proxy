@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - HTTP Proxy Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/custom.css">
+    <script src="js/i18n.js"></script>
+    <script src="js/lang-switcher.js"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-router"></i> Proxy Admin
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#dashboard" data-view="dashboard">
+                            <i class="bi bi-speedometer2"></i> <span data-i18n="nav.dashboard">Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#http-rules" data-view="http-rules">
+                            <i class="bi bi-arrow-left-right"></i> <span data-i18n="nav.httpRules">HTTP Rules</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#ws-rules" data-view="ws-rules">
+                            <i class="bi bi-plug"></i> <span data-i18n="nav.wsRules">WebSocket Rules</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#certificates" data-view="certificates">
+                            <i class="bi bi-shield-check"></i> <span data-i18n="nav.certificates">Certificates</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#users" data-view="users">
+                            <i class="bi bi-people"></i> <span data-i18n="nav.users">Users</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#settings" data-view="settings">
+                            <i class="bi bi-gear"></i> <span data-i18n="nav.settings">Settings</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#backups" data-view="backups">
+                            <i class="bi bi-hdd-stack"></i> <span data-i18n="nav.backups">Backups</span>
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="langToggle">
+                            <i class="bi bi-globe"></i>
+                            <span id="currentLang">EN</span>
+                        </a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    <span class="text-white me-3">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="currentUser">Loading...</span>
+                    </span>
+                    <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+                        <i class="bi bi-box-arrow-right"></i> <span data-i18n="nav.logout">Logout</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view">
+            <h2 class="mb-4"><i class="bi bi-speedometer2"></i> <span data-i18n="dashboard.title">Dashboard</span></h2>
+
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card text-white bg-primary mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="card-title" data-i18n="httpRules.title">HTTP Rules</h5>
+                                    <h2 class="mb-0" id="httpRulesCount">-</h2>
+                                </div>
+                                <i class="bi bi-arrow-left-right" style="font-size: 3rem; opacity: 0.5;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card text-white bg-success mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="card-title" data-i18n="dashboard.wsRules">WebSocket Rules</h5>
+                                    <h2 class="mb-0" id="wsRulesCount">-</h2>
+                                </div>
+                                <i class="bi bi-plug" style="font-size: 3rem; opacity: 0.5;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card text-white bg-info mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="card-title" data-i18n="dashboard.certificates">Certificates</h5>
+                                    <h2 class="mb-0" id="certsCount">-</h2>
+                                </div>
+                                <i class="bi bi-shield-check" style="font-size: 3rem; opacity: 0.5;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card text-white bg-warning mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="card-title" data-i18n="dashboard.proxyUsers">Proxy Users</h5>
+                                    <h2 class="mb-0" id="usersCount">-</h2>
+                                </div>
+                                <i class="bi bi-people" style="font-size: 3rem; opacity: 0.5;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="bi bi-info-circle"></i> <span data-i18n="dashboard.systemStatus">System Status</span>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row">
+                                <dt class="col-sm-6" data-i18n="dashboard.uptime">Uptime:</dt>
+                                <dd class="col-sm-6" id="uptime">-</dd>
+
+                                <dt class="col-sm-6" data-i18n="dashboard.memoryUsed">Memory Used:</dt>
+                                <dd class="col-sm-6" id="memoryUsed">-</dd>
+
+                                <dt class="col-sm-6" data-i18n="dashboard.configVersion">Config Version:</dt>
+                                <dd class="col-sm-6" id="configVersion">-</dd>
+
+                                <dt class="col-sm-6" data-i18n="dashboard.lastModified">Last Modified:</dt>
+                                <dd class="col-sm-6" id="lastModified">-</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="bi bi-lightning-charge"></i> <span data-i18n="dashboard.quickActions">Quick Actions</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-primary" onclick="navigateTo('http-rules')">
+                                    <i class="bi bi-plus-circle"></i> <span data-i18n="dashboard.addHttpRule">Add HTTP Rule</span>
+                                </button>
+                                <button class="btn btn-success" onclick="navigateTo('ws-rules')">
+                                    <i class="bi bi-plus-circle"></i> <span data-i18n="dashboard.addWsRule">Add WebSocket Rule</span>
+                                </button>
+                                <button class="btn btn-info" onclick="navigateTo('certificates')">
+                                    <i class="bi bi-upload"></i> <span data-i18n="dashboard.uploadCert">Upload Certificate</span>
+                                </button>
+                                <button class="btn btn-warning" onclick="navigateTo('backups')">
+                                    <i class="bi bi-download"></i> <span data-i18n="dashboard.createBackup">Create Backup</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HTTP Rules View -->
+        <div id="http-rules-view" class="view d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-arrow-left-right"></i> <span data-i18n="httpRules.title">HTTP Proxy Rules</span></h2>
+                <button class="btn btn-primary" id="addHttpRuleBtn">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="httpRules.addRule">Add Rule</span>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="httpRules.enabled">Enabled</th>
+                                    <th data-i18n="httpRules.domain">Domain</th>
+                                    <th data-i18n="httpRules.path">Path</th>
+                                    <th data-i18n="httpRules.target">Target</th>
+                                    <th data-i18n="httpRules.protocol">Protocol</th>
+                                    <th data-i18n="httpRules.pretendMode">Pretend Mode</th>
+                                    <th data-i18n="httpRules.priority">Priority</th>
+                                    <th data-i18n="httpRules.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="httpRulesTable">
+                                <tr>
+                                    <td colspan="8" class="text-center" data-i18n="httpRules.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4 d-none" id="acmeSection">
+                <div class="card-header">
+                    <i class="bi bi-magic"></i> <span data-i18n="acme.title">ACME Automatic Certificates</span>
+                </div>
+                <div class="card-body">
+                    <form id="acmeIssueForm" class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label for="acmeDomain" class="form-label" data-i18n="acme.domain">Domain</label>
+                            <input type="text" class="form-control" id="acmeDomain" placeholder="example.com" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="acmeDnsProvider" class="form-label" data-i18n="acme.dnsProvider">DNS Provider</label>
+                            <select class="form-select" id="acmeDnsProvider" required></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="acmeServer" class="form-label" data-i18n="acme.server">ACME Server URL</label>
+                            <input type="url" class="form-control" id="acmeServer">
+                        </div>
+                        <div class="col-12">
+                            <div class="row g-3" id="acmeCredentialFields"></div>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-success" id="issueAcmeBtn">
+                                <i class="bi bi-shield-plus"></i> <span data-i18n="acme.issue">Issue Certificate</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="certificates.domain">Domain</th>
+                                    <th data-i18n="certificates.expiresAt">Expires At</th>
+                                    <th data-i18n="certificates.certFile">Certificate File</th>
+                                    <th data-i18n="certificates.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="acmeCertsTable">
+                                <tr>
+                                    <td colspan="4" class="text-center" data-i18n="certificates.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WebSocket Rules View -->
+        <div id="ws-rules-view" class="view d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-plug"></i> <span data-i18n="wsRules.title">WebSocket Proxy Rules</span></h2>
+                <button class="btn btn-success" id="addWsRuleBtn">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="wsRules.addRule">Add Rule</span>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="wsRules.enabled">Enabled</th>
+                                    <th data-i18n="wsRules.domain">Domain</th>
+                                    <th data-i18n="wsRules.path">Path</th>
+                                    <th data-i18n="wsRules.target">Target</th>
+                                    <th data-i18n="wsRules.protocol">Protocol</th>
+                                    <th data-i18n="wsRules.pretendMode">Pretend Mode</th>
+                                    <th data-i18n="wsRules.priority">Priority</th>
+                                    <th data-i18n="wsRules.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wsRulesTable">
+                                <tr>
+                                    <td colspan="8" class="text-center" data-i18n="wsRules.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Certificates View -->
+        <div id="certificates-view" class="view d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-shield-check"></i> <span data-i18n="certificates.title">SSL Certificates</span></h2>
+                <button class="btn btn-primary" id="uploadCertBtn">
+                    <i class="bi bi-upload"></i> <span data-i18n="certificates.upload">Upload Certificate</span>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="certificates.domain">Domain</th>
+                                    <th data-i18n="certificates.certFile">Certificate File</th>
+                                    <th data-i18n="certificates.keyFile">Key File</th>
+                                    <th data-i18n="certificates.expiresAt">Expires At</th>
+                                    <th data-i18n="certificates.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="certsTable">
+                                <tr>
+                                    <td colspan="5" class="text-center" data-i18n="certificates.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users View -->
+        <div id="users-view" class="view d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-people"></i> <span data-i18n="users.proxyUsers">Proxy Users</span></h2>
+                <button class="btn btn-primary" id="addUserBtn">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="users.addUser">Add User</span>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="users.host">Host</th>
+                                    <th data-i18n="users.username">Username</th>
+                                    <th data-i18n="users.passwordHash">Password Hash</th>
+                                    <th data-i18n="users.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTable">
+                                <tr>
+                                    <td colspan="4" class="text-center" data-i18n="users.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="settings-view" class="view d-none">
+            <h2 class="mb-4"><i class="bi bi-gear"></i> <span data-i18n="settings.title">Settings</span></h2>
+
+            <div class="card">
+                <div class="card-body">
+                    <form id="settingsForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="maxSession" class="form-label" data-i18n="settings.maxSession">Max Session (0 = unlimited)</label>
+                                    <input type="number" class="form-control" id="maxSession" name="maxSession" min="0" value="0">
+                                    <div class="form-text" data-i18n="settings.maxSessionHelp">Maximum number of concurrent sessions per user (0 = unlimited)</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="defaultUsername" class="form-label" data-i18n="settings.defaultUsername">Default Username</label>
+                                    <input type="text" class="form-control" id="defaultUsername" name="defaultUsername">
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="defaultPassword" class="form-label" data-i18n="settings.defaultPassword">Default Password (MD5)</label>
+                                    <input type="text" class="form-control" id="defaultPassword" name="defaultPassword">
+                                    <div class="form-text" data-i18n="settings.defaultPasswordHelp">MD5 hash of the default password</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="defaultAuthEnabled" name="defaultAuthEnabled">
+                                        <label class="form-check-label" for="defaultAuthEnabled" data-i18n="settings.enableDefaultAuth">
+                                            Enable Default Authentication
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> <span data-i18n="settings.saveSettings">Save Settings</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backups View -->
+        <div id="backups-view" class="view d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-hdd-stack"></i> <span data-i18n="backups.title">Configuration Backups</span></h2>
+                <button class="btn btn-primary" id="createBackupBtn">
+                    <i class="bi bi-download"></i> <span data-i18n="backups.create">Create Backup</span>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="backups.name">Name</th>
+                                    <th data-i18n="backups.size">Size</th>
+                                    <th data-i18n="backups.created">Created</th>
+                                    <th data-i18n="backups.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="backupsTable">
+                                <tr>
+                                    <td colspan="4" class="text-center" data-i18n="backups.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="auth.changePassword">Change Password</h5>
+                </div>
+                <div class="modal-body">
+                    <form id="changePasswordForm">
+                        <div class="mb-3">
+                            <label for="oldAdminPassword" class="form-label" data-i18n="auth.currentPassword">Current Password</label>
+                            <input type="password" class="form-control" id="oldAdminPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newAdminPassword" class="form-label" data-i18n="auth.newPassword">New Password</label>
+                            <input type="password" class="form-control" id="newAdminPassword" minlength="6" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmAdminPassword" class="form-label" data-i18n="auth.confirmPassword">Confirm Password</label>
+                            <input type="password" class="form-control" id="confirmAdminPassword" minlength="6" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="changePasswordBtn">
+                        <i class="bi bi-key"></i> <span data-i18n="auth.changePassword">Change Password</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HTTP Rule Modal -->
+    <div class="modal fade" id="httpRuleModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="httpRuleModalTitle" data-i18n="httpRules.add">Add HTTP Rule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="httpRuleForm">
+                        <input type="hidden" id="httpRuleId">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="httpRuleEnabled" checked>
+                                <label class="form-check-label" for="httpRuleEnabled" data-i18n="modal.enabled">Enabled</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRuleProtocol" class="form-label" data-i18n="modal.protocol">Protocol</label>
+                            <select class="form-select" id="httpRuleProtocol" required>
+                                <option value="http:">HTTP</option>
+                                <option value="https:">HTTPS</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRuleDomain" class="form-label" data-i18n="modal.domain">Domain (optional)</label>
+                            <input type="text" class="form-control" id="httpRuleDomain" placeholder="example.com">
+                            <div class="form-text" data-i18n="modal.domainHelp">Leave empty to match all domains</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRulePath" class="form-label" data-i18n="modal.path">Path</label>
+                            <input type="text" class="form-control" id="httpRulePath" placeholder="/" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRuleTargetHost" class="form-label" data-i18n="modal.targetHost">Target Host</label>
+                            <input type="text" class="form-control" id="httpRuleTargetHost" placeholder="192.168.1.100" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRuleTargetPort" class="form-label" data-i18n="modal.targetPort">Target Port</label>
+                            <input type="number" class="form-control" id="httpRuleTargetPort" min="1" max="65535" value="80" required>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="httpRulePretendMode" checked>
+                                <label class="form-check-label" for="httpRulePretendMode" data-i18n="modal.pretendMode">Pretend Mode (rewrite host header)</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="httpRulePriority" class="form-label" data-i18n="modal.priority">Priority</label>
+                            <input type="number" class="form-control" id="httpRulePriority" min="1" value="1" required>
+                            <div class="form-text" data-i18n="modal.priorityHelp">Lower numbers have higher priority</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="modal.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveHttpRuleBtn" data-i18n="modal.save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WS Rule Modal -->
+    <div class="modal fade" id="wsRuleModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="wsRuleModalTitle" data-i18n="wsRules.add">Add WebSocket Rule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="wsRuleForm">
+                        <input type="hidden" id="wsRuleId">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="wsRuleEnabled" checked>
+                                <label class="form-check-label" for="wsRuleEnabled" data-i18n="modal.enabled">Enabled</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRuleProtocol" class="form-label" data-i18n="modal.protocol">Protocol</label>
+                            <select class="form-select" id="wsRuleProtocol" required>
+                                <option value="ws:">WS</option>
+                                <option value="wss:">WSS</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRuleDomain" class="form-label" data-i18n="modal.domain">Domain (optional)</label>
+                            <input type="text" class="form-control" id="wsRuleDomain" placeholder="example.com">
+                            <div class="form-text" data-i18n="modal.domainHelp">Leave empty to match all domains</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRulePath" class="form-label" data-i18n="modal.path">Path</label>
+                            <input type="text" class="form-control" id="wsRulePath" placeholder="/" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRuleTargetHost" class="form-label" data-i18n="modal.targetHost">Target Host</label>
+                            <input type="text" class="form-control" id="wsRuleTargetHost" placeholder="192.168.1.100" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRuleTargetPort" class="form-label" data-i18n="modal.targetPort">Target Port</label>
+                            <input type="number" class="form-control" id="wsRuleTargetPort" min="1" max="65535" value="80" required>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="wsRulePretendMode" checked>
+                                <label class="form-check-label" for="wsRulePretendMode" data-i18n="modal.pretendMode">Pretend Mode (rewrite host header)</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="wsRulePriority" class="form-label" data-i18n="modal.priority">Priority</label>
+                            <input type="number" class="form-control" id="wsRulePriority" min="1" value="1" required>
+                            <div class="form-text" data-i18n="modal.priorityHelp">Lower numbers have higher priority</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="modal.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveWsRuleBtn" data-i18n="modal.save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Certificate Modal -->
+    <div class="modal fade" id="certificateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="certificates.upload">Upload Certificate</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="certificateForm">
+                        <div class="mb-3">
+                            <label for="certificateDomain" class="form-label" data-i18n="certificates.domain">Domain</label>
+                            <input type="text" class="form-control" id="certificateDomain" placeholder="example.com" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="certificateCertFile" class="form-label" data-i18n="certificates.certFile">Certificate File</label>
+                            <input type="file" class="form-control" id="certificateCertFile" accept=".crt,.pem" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="certificateKeyFile" class="form-label" data-i18n="certificates.keyFile">Key File</label>
+                            <input type="file" class="form-control" id="certificateKeyFile" accept=".key,.pem" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="modal.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveCertificateBtn" data-i18n="modal.save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="users.add">Add Proxy User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="userForm">
+                        <div class="mb-3">
+                            <label for="userHost" class="form-label" data-i18n="modal.userHost">Host</label>
+                            <input type="text" class="form-control" id="userHost" placeholder="example.com" required>
+                            <div class="form-text" data-i18n="modal.userHostHelp">The host/domain this user can access</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="userUsername" class="form-label" data-i18n="modal.userUsername">Username</label>
+                            <input type="text" class="form-control" id="userUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="userPassword" class="form-label" data-i18n="modal.userPassword">Password</label>
+                            <input type="password" class="form-control" id="userPassword" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="modal.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveUserBtn" data-i18n="modal.save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-bell me-2"></i>
+                <strong class="me-auto" id="toastTitle" data-i18n="notification.title">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 语言切换初始化 / Language Switcher Initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            const langToggle = document.getElementById('langToggle');
+            if (langToggle) {
+                langToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (window.i18n) {
+                        window.i18n.toggleLanguage();
+                        updateLanguageDisplay();
+                    }
+                });
+            }
+
+            // 初始化国际化
+            if (window.i18n) {
+                window.i18n.init();
+                updateLanguageDisplay();
+            }
+        });
+
+        function updateLanguageDisplay() {
+            const currentLang = window.i18n ? window.i18n.getCurrentLanguage() : 'en';
+            const currentLangText = document.getElementById('currentLang');
+            if (currentLangText) {
+                currentLangText.textContent = currentLang === 'zh' ? '中文' : 'EN';
+            }
+        }
+    </script>
+    <script src="js/app.js"></script>
+</body>
+</html>

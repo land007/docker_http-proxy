@@ -1,12 +1,14 @@
 version: "2.1"
 networks:
   internal_network:
+volumes:
+  proxy_backups:
 services:
   724_http-proxy:
     restart: always
     networks:
       - internal_network
-    image: land007/http-proxy:latest
+    image: 724_http-proxy:node20
     container_name: 724_http-proxy
     logging:
       driver: "json-file"
@@ -14,19 +16,20 @@ services:
         max-size: "300k"
         max-file: "3"
     volumes:
-      - ./cert:/node_/cert:cached
-      - ./users_list.json:/node_/users_list.json
+      - proxy_backups:/node_/backups
     environment:
-      - "DOMAIN_NAME=724.msa.gov.cn"
+      - "DOMAIN_NAME=www.gjxt.xyz"
       - "username=gjxt"
       - "password="
-      - "http_proxy_domains=724.msa.gov.cn"
+      - "ADMIN_PORT=8444"
+      - "ADMIN_HTTP_MODE=true"
+      - "http_proxy_domains=www.gjxt.xyz"
       - "http_proxy_protocols=https:"
       - "http_proxy_paths=/"
       - "http_proxy_hosts=im1c5366d.7x24cc.com"
       - "http_proxy_ports=443"
       - "http_proxy_pretends=true"
-      - "ws_proxy_domains=724.msa.gov.cn"
+      - "ws_proxy_domains=www.gjxt.xyz"
       - "ws_proxy_protocols=wss:"
       - "ws_proxy_paths=/"
       - "ws_proxy_hosts=yw.msa.gov.cn"
@@ -38,5 +41,6 @@ services:
       - "80"
     ports:
       - "8443:8443"
+      - "8444:8444"
       - "443:443"
       - "80:80"

@@ -1,4 +1,4 @@
-FROM land007/node:latest
+FROM node:20
 
 MAINTAINER Jia Yiqiu <yiqiujia@hotmail.com>
 
@@ -7,9 +7,15 @@ RUN echo $(date "+%Y-%m-%d_%H:%M:%S") >> /.image_times && \
 	echo "land007/http-proxy" >> /.image_names && \
 	echo "land007/http-proxy" > /.image_name
 
-RUN . $HOME/.nvm/nvm.sh && cd / && npm install basic-auth node-session
+RUN npm install -g basic-auth node-session express express-session session-file-store bcrypt multer express-validator csrf chokidar helmet cors http-proxy
 ADD node/proxy.js /node_/server.js
 ADD node/web-outgoing.js /node_modules/http-proxy/lib/http-proxy/passes/web-outgoing.js
+ADD node/admin-api.js /node_/admin-api.js
+ADD node/proxy-config-loader.js /node_/proxy-config-loader.js
+ADD node/config-validator.js /node_/config-validator.js
+ADD node/auth-manager.js /node_/auth-manager.js
+ADD node/acme-manager.js /node_/acme-manager.js
+ADD node/web-ui /node_/web-ui
 
 ENV username="land007" \
 	password="fcea920f7412b5da7be0cf42b8c93759" \
@@ -33,13 +39,25 @@ ADD node/start.sh /node_/
 ADD node/cert /node_/cert
 RUN sed -i 's/\r//' /node_/start.sh
 ADD node/users_list.json /node_/users_list.json
+ADD node/admin_users.json /node_/admin_users.json
+ADD proxy-config.json /node_/proxy-config.json
 
 ENV DOMAIN_NAME=voice.qhkly.com
 EXPOSE 80
 EXPOSE 443
 EXPOSE 8443
 
-CMD /check.sh /node && /node/start.sh
+# Install supervisor and other dependencies
+RUN npm install -g supervisor
+
+# Create simplified start script
+RUN echo '#!/bin/bash\n\
+export NODE_PATH=/usr/local/lib/node_modules\n\
+nohup node /node_/admin-api.js > /tmp/admin-api.log 2>&1 &\n\
+supervisor -w /node_/ -i node_modules /node_/server.js\n\
+' > /node_/start-simple.sh && chmod +x /node_/start-simple.sh
+
+CMD ["/node_/start-simple.sh"]
 
 #/node_modules/http-proxy/lib/http-proxy/passes/web-outgoing.js:54:24
 #//var target = url.parse(options.target);

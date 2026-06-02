@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="login.title">Admin Login - HTTP Proxy</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/custom.css">
+    <style>
+        .lang-switch {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .lang-switch .btn {
+            border-radius: 20px;
+            padding: 8px 16px;
+        }
+    </style>
+</head>
+<body class="login-page">
+    <!-- 语言切换器 / Language Switcher -->
+    <div class="lang-switch">
+        <button class="btn btn-outline-primary" id="langToggle" onclick="toggleLanguage()">
+            <i class="bi bi-globe"></i>
+            <span id="currentLang">EN</span>
+        </button>
+    </div>
+
+    <div class="container">
+        <div class="row justify-content-center align-items-center min-vh-100">
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow-lg">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <i class="bi bi-shield-lock-fill text-primary" style="font-size: 3rem;"></i>
+                            <h2 class="mt-3" data-i18n="login.title">Admin Login</h2>
+                            <p class="text-muted">HTTP/HTTPS Reverse Proxy</p>
+                        </div>
+
+                        <form id="loginForm">
+                            <div class="mb-3">
+                                <label for="username" class="form-label" data-i18n="login.username">Username</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-person"></i>
+                                    </span>
+                                    <input type="text" class="form-control" id="username" name="username" required>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="password" class="form-label" data-i18n="login.password">Password</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-key"></i>
+                                    </span>
+                                    <input type="password" class="form-control" id="password" name="password" required>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="remember">
+                                <label class="form-check-label" for="remember" data-i18n="login.remember">
+                                    Remember me
+                                </label>
+                            </div>
+
+                            <div id="alert" class="alert alert-danger d-none" role="alert"></div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg" id="loginBtn">
+                                    <i class="bi bi-box-arrow-in-right"></i>
+                                    <span data-i18n="login.button">Login</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="text-center mt-4">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                <span id="defaultCreds">Default credentials: admin / admin123</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/i18n.js"></script>
+    <script>
+        // 初始化国际化
+        i18n.init();
+        updateLanguageDisplay();
+
+        function toggleLanguage() {
+            i18n.toggleLanguage();
+            updateLanguageDisplay();
+            updateDefaultCreds();
+        }
+
+        function updateLanguageDisplay() {
+            const currentLang = i18n.getCurrentLanguage();
+            document.getElementById('currentLang').textContent = currentLang === 'zh' ? '中文' : 'EN';
+        }
+
+        function updateDefaultCreds() {
+            const currentLang = i18n.getCurrentLanguage();
+            const defaultCredsEl = document.getElementById('defaultCreds');
+            if (currentLang === 'zh') {
+                defaultCredsEl.textContent = '默认凭据: admin / Msa@1234567';
+            } else {
+                defaultCredsEl.textContent = 'Default credentials: admin / Msa@1234567';
+            }
+        }
+
+        // 初始化默认凭据显示
+        updateDefaultCreds();
+
+        const loginForm = document.getElementById('loginForm');
+        const alertDiv = document.getElementById('alert');
+        const loginBtn = document.getElementById('loginBtn');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            loginBtn.disabled = true;
+            
+            const loadingText = i18n.getCurrentLanguage() === 'zh' ? '登录中...' : 'Logging in...';
+            loginBtn.innerHTML = '<i class="bi bi-arrow-repeat spinner"></i> ' + loadingText;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 存储会话信息
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('token', data.token);
+                    
+                    // 跳转到主页面
+                    window.location.href = '/admin/';
+                } else {
+                    showError(data.error || (i18n.getCurrentLanguage() === 'zh' ? '登录失败' : 'Login failed'));
+                }
+            } catch (error) {
+                showError(i18n.getCurrentLanguage() === 'zh' ? '网络错误' : 'Network error');
+            } finally {
+                loginBtn.disabled = false;
+                const loginBtnText = i18n.t('login.button');
+                loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> ' + loginBtnText;
+            }
+        });
+
+        function showError(message) {
+            alertDiv.textContent = message;
+            alertDiv.classList.remove('d-none');
+            setTimeout(() => {
+                alertDiv.classList.add('d-none');
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

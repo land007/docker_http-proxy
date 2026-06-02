@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "lastModified": "2026-03-06T12:00:00Z",
+  "settings": {
+    "maxSession": 0,
+    "defaultAuth": {
+      "enabled": true,
+      "username": "land007",
+      "password": "fcea920f7412b5da7be0cf42b8c93759"
+    }
+  },
+  "httpProxyRules": [
+    {
+      "id": "rule-1",
+      "enabled": true,
+      "protocol": "https:",
+      "domain": "www.gjxt.xyz",
+      "path": "/",
+      "targetHost": "im1c5366d.7x24cc.com",
+      "targetPort": 443,
+      "pretendMode": true,
+      "priority": 1
+    }
+  ],
+  "wsProxyRules": [
+    {
+      "id": "ws-rule-1",
+      "enabled": true,
+      "protocol": "wss:",
+      "domain": "www.gjxt.xyz",
+      "path": "/",
+      "targetHost": "yw.msa.gov.cn",
+      "targetPort": 443,
+      "pretendMode": true,
+      "priority": 1
+    }
+  ],
+  "sslCertificates": [
+    {
+      "domain": "www.gjxt.xyz",
+      "certFile": "cert/www.gjxt.xyz_chain.crt",
+      "keyFile": "cert/www.gjxt.xyz_key.key",
+      "expiresAt": null
+    }
+  ]
+}
