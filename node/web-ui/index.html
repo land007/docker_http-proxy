@@ -227,54 +227,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="card mt-4 d-none" id="acmeSection">
-                <div class="card-header">
-                    <i class="bi bi-magic"></i> <span data-i18n="acme.title">ACME Automatic Certificates</span>
-                </div>
-                <div class="card-body">
-                    <form id="acmeIssueForm" class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <label for="acmeDomain" class="form-label" data-i18n="acme.domain">Domain</label>
-                            <input type="text" class="form-control" id="acmeDomain" placeholder="example.com" required>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="acmeDnsProvider" class="form-label" data-i18n="acme.dnsProvider">DNS Provider</label>
-                            <select class="form-select" id="acmeDnsProvider" required></select>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="acmeServer" class="form-label" data-i18n="acme.server">ACME Server URL</label>
-                            <input type="url" class="form-control" id="acmeServer">
-                        </div>
-                        <div class="col-12">
-                            <div class="row g-3" id="acmeCredentialFields"></div>
-                        </div>
-                        <div class="col-12">
-                            <button type="button" class="btn btn-success" id="issueAcmeBtn">
-                                <i class="bi bi-shield-plus"></i> <span data-i18n="acme.issue">Issue Certificate</span>
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th data-i18n="certificates.domain">Domain</th>
-                                    <th data-i18n="certificates.expiresAt">Expires At</th>
-                                    <th data-i18n="certificates.certFile">Certificate File</th>
-                                    <th data-i18n="certificates.actions">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="acmeCertsTable">
-                                <tr>
-                                    <td colspan="4" class="text-center" data-i18n="certificates.loading">Loading...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- WebSocket Rules View -->
@@ -338,6 +290,54 @@
                             <tbody id="certsTable">
                                 <tr>
                                     <td colspan="5" class="text-center" data-i18n="certificates.loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4 d-none" id="acmeSection">
+                <div class="card-header">
+                    <i class="bi bi-magic"></i> <span data-i18n="acme.title">ACME Automatic Certificates</span>
+                </div>
+                <div class="card-body">
+                    <form id="acmeIssueForm" class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label for="acmeDomain" class="form-label" data-i18n="acme.domain">Domain</label>
+                            <input type="text" class="form-control" id="acmeDomain" placeholder="example.com" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="acmeDnsProvider" class="form-label" data-i18n="acme.dnsProvider">DNS Provider</label>
+                            <select class="form-select" id="acmeDnsProvider" required></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="acmeServer" class="form-label" data-i18n="acme.server">ACME Server URL</label>
+                            <input type="url" class="form-control" id="acmeServer">
+                        </div>
+                        <div class="col-12">
+                            <div class="row g-3" id="acmeCredentialFields"></div>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-success" id="issueAcmeBtn">
+                                <i class="bi bi-shield-plus"></i> <span data-i18n="acme.issue">Issue Certificate</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="certificates.domain">Domain</th>
+                                    <th data-i18n="certificates.expiresAt">Expires At</th>
+                                    <th data-i18n="certificates.certFile">Certificate File</th>
+                                    <th data-i18n="certificates.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="acmeCertsTable">
+                                <tr>
+                                    <td colspan="4" class="text-center" data-i18n="certificates.loading">Loading...</td>
                                 </tr>
                             </tbody>
                         </table>
