@@ -1,0 +1,76 @@
+name: Build and Push Docker Image
+
+# Build only when a version tag is pushed (e.g. v1.0.0). Manual runs allowed too.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/http-proxy
+            ghcr.io/${{ github.repository_owner }}/http-proxy
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # After the base image is published, trigger the ACME variant to rebuild
+      # on top of it. Requires a DISPATCH_PAT secret (a PAT with repo scope on the
+      # land007/docker_http-proxy-acme repository). Skipped gracefully if absent.
+      - name: Trigger ACME image rebuild
+        if: github.ref_type == 'tag'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DISPATCH_PAT not set — skipping cross-repo cascade."
+            exit 0
+          fi
+          gh api "repos/${{ github.repository_owner }}/docker_http-proxy-acme/dispatches" \
+            -f "event_type=base-updated" \
+            -F "client_payload[version]=${GITHUB_REF_NAME#v}"

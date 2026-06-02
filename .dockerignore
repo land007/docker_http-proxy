@@ -1,0 +1,8 @@
+.git
+.github
+node/node_modules
+node/backups
+backups
+*.tar
+*.tar.gz
+**/.DS_Store
