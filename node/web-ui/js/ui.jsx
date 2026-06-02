@@ -37,8 +37,8 @@ function Icon({ name, d, size = 18, sw = 1.7, style }) {
 /* ---------- charts ---------- */
 function AreaChart({ data, h = 180, stroke = "var(--accent)", fill = "var(--accent)", pad = 6 }) {
   const w = 600;
-  const max = Math.max(...data) * 1.15, min = 0, n = data.length;
-  const x = (i) => pad + (i / (n - 1)) * (w - pad * 2);
+  const max = Math.max(1, ...data) * 1.15, min = 0, n = data.length || 1;
+  const x = (i) => pad + (n <= 1 ? 0 : (i / (n - 1)) * (w - pad * 2));
   const y = (v) => h - pad - ((v - min) / (max - min)) * (h - pad * 2);
   const line = data.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const area = `${line} L${x(n - 1).toFixed(1)},${h - pad} L${x(0).toFixed(1)},${h - pad} Z`;

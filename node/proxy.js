@@ -13,6 +13,7 @@ const NodeSession = require('node-session');
 const util = require('util');
 const readFile = util.promisify(fs.readFile);
 const configLoader = require('./proxy-config-loader');
+const proxyStats = require('./proxy-stats');
 
 var nodeSession = new NodeSession({
 	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
@@ -251,6 +252,47 @@ const send401 = function(res) {
 	res.end('<html><body>Need some creds son</body></html>');
 };
 
+const buildRuleStatsMeta = function(kind, index) {
+	const protocols = kind === 'ws' ? ws_proxy_protocols : http_proxy_protocols;
+	const domains = kind === 'ws' ? ws_proxy_domains : http_proxy_domains;
+	const paths = kind === 'ws' ? ws_proxy_paths : http_proxy_paths;
+	const hosts = kind === 'ws' ? ws_proxy_hosts : http_proxy_hosts;
+	const ports = kind === 'ws' ? ws_proxy_ports : http_proxy_ports;
+	const protocol = protocols[index] || (kind === 'ws' ? 'ws:' : 'http:');
+	const domain = domains[index] || '';
+	const pathValue = paths[index] || '/';
+	const target = `${hosts[index] || ''}:${ports[index] || ''}`;
+	return {
+		key: `${kind}|${protocol}|${domain}|${pathValue}|${target}`,
+		kind,
+		protocol,
+		domain,
+		path: pathValue,
+		target
+	};
+};
+
+const installResponseByteCounter = function(res, sample) {
+	const originalWrite = res.write;
+	const originalEnd = res.end;
+	const addBytes = (chunk, encoding) => {
+		if (!chunk) return;
+		if (Buffer.isBuffer(chunk)) {
+			sample.responseBytes += chunk.length;
+		} else if (typeof chunk === 'string') {
+			sample.responseBytes += Buffer.byteLength(chunk, encoding);
+		}
+	};
+	res.write = function(chunk, encoding, callback) {
+		addBytes(chunk, encoding);
+		return originalWrite.apply(this, arguments);
+	};
+	res.end = function(chunk, encoding, callback) {
+		addBytes(chunk, encoding);
+		return originalEnd.apply(this, arguments);
+	};
+};
+
 const _userSession = {};
 
 var users_list;
@@ -362,13 +404,25 @@ const _requestListener = async function(req, res) {
 	for (let h in http_proxy_paths) {
 		// 路径及域名验证
 		if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
+			// 命中规则即开始统计，包含认证挑战等未转发完成的请求
+			have_http_proxy_path = true;
+			const statsSample = proxyStats.beginHttp(buildRuleStatsMeta('http', h));
+			statsSample.responseBytes = 0;
+			installResponseByteCounter(res, statsSample);
+			let statsFinished = false;
+			const finishStats = () => {
+				if (statsFinished) return;
+				statsFinished = true;
+				proxyStats.finishHttp(statsSample, res.statusCode, statsSample.responseBytes || 0);
+			};
+			res.once('finish', finishStats);
+			res.once('close', finishStats);
 			// 检查登录信息
 			if(!check(req, h, _token)) {
 				send401(res);
 				return;
 			}
 			// 都检查通过了可以代理
-			have_http_proxy_path = true;
 			if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
 				let proxy = httpProxy.createProxyServer({
 	                autoRewrite: true,
@@ -381,6 +435,15 @@ const _requestListener = async function(req, res) {
 					},
 					secure: false,
 					ws: false
+				});
+				proxy.on('error', function(error, req, res) {
+					console.error('⛔ HTTP proxy error:', error.message);
+					if (res && !res.headersSent) {
+						res.writeHead(502, { 'Content-Type': 'text/plain' });
+					}
+					if (res && !res.writableEnded) {
+						res.end('Proxy error');
+					}
 				});
 //				proxy.on('proxyReq', function(proxyReq, req, res, options) {
 //					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
@@ -395,6 +458,15 @@ const _requestListener = async function(req, res) {
 					},
 					secure: false,
 					ws: false
+				});
+				proxy.on('error', function(error, req, res) {
+					console.error('⛔ HTTP proxy error:', error.message);
+					if (res && !res.headersSent) {
+						res.writeHead(502, { 'Content-Type': 'text/plain' });
+					}
+					if (res && !res.writableEnded) {
+						res.end('Proxy error');
+					}
 				});
 				proxy.web(req, res);
 			}
@@ -468,6 +540,15 @@ const _upgrade = function(req, socket, head) {
 			return;
 		}
 		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
+			const statsSample = proxyStats.openWs(buildRuleStatsMeta('ws', w));
+			let statsClosed = false;
+			const closeStats = (hadError) => {
+				if (statsClosed) return;
+				statsClosed = true;
+				proxyStats.closeWs(statsSample, hadError);
+			};
+			socket.once('close', () => closeStats(false));
+			socket.once('error', () => closeStats(true));
 			if (ws_proxy_pretends[w] && ws_proxy_pretends[w] == 'true') {
 				let proxy = new httpProxy.createProxyServer({
 	                autoRewrite: true,
@@ -481,6 +562,10 @@ const _upgrade = function(req, socket, head) {
 					secure: false,
 					ws: true
 				});
+				proxy.on('error', function(error) {
+					console.error('⛔ WS proxy error:', error.message);
+					closeStats(true);
+				});
 				proxy.ws(req, socket, head);
 			} else {
 				let proxy = new httpProxy.createProxyServer({
@@ -491,6 +576,10 @@ const _upgrade = function(req, socket, head) {
 					},
 					secure: false,
 					ws: true
+				});
+				proxy.on('error', function(error) {
+					console.error('⛔ WS proxy error:', error.message);
+					closeStats(true);
 				});
 				proxy.ws(req, socket, head);
 			}

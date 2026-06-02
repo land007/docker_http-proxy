@@ -15,6 +15,7 @@ ADD node/proxy-config-loader.js /node_/proxy-config-loader.js
 ADD node/config-validator.js /node_/config-validator.js
 ADD node/auth-manager.js /node_/auth-manager.js
 ADD node/acme-manager.js /node_/acme-manager.js
+ADD node/proxy-stats.js /node_/proxy-stats.js
 ADD node/web-ui /node_/web-ui
 
 ENV username="land007" \

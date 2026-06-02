@@ -191,6 +191,14 @@ function App() {
     })();
   }, [reloadAll, fail]);
 
+  useEffect(() => {
+    if (route !== "dashboard") return undefined;
+    const timer = setInterval(() => {
+      loadStatus().catch(fail);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [route, loadStatus, fail]);
+
   const withSaveRules = (kind) => async (nextRules) => {
     const current = kind === "ws" ? ws : http;
     const setLocal = kind === "ws" ? setWs : setHttp;

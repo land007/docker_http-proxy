@@ -18,6 +18,7 @@ const authManager = require('./auth-manager');
 const configLoader = require('./proxy-config-loader');
 const configValidator = require('./config-validator');
 const acmeManager = require('./acme-manager');
+const proxyStats = require('./proxy-stats');
 const { body, validationResult, param } = require('express-validator');
 
 const app = express();
@@ -973,6 +974,7 @@ app.delete('/api/admin/users/:id', requireAuth, [
 app.get('/api/status', requireAuth, (req, res) => {
 	try {
 		const config = configLoader.getConfig();
+		const stats = proxyStats.readSnapshot();
 
 		res.json({
 			uptime: process.uptime(),
@@ -981,11 +983,25 @@ app.get('/api/status', requireAuth, (req, res) => {
 			lastModified: config.lastModified,
 			httpRulesCount: config.httpProxyRules ? config.httpProxyRules.length : 0,
 			wsRulesCount: config.wsProxyRules ? config.wsProxyRules.length : 0,
-			certificatesCount: config.sslCertificates ? config.sslCertificates.length : 0
+			certificatesCount: config.sslCertificates ? config.sslCertificates.length : 0,
+			proxyStats: stats
 		});
 	} catch (error) {
 		console.error('Error getting status:', error);
 		res.status(500).json({ error: 'Failed to get status' });
+	}
+});
+
+/**
+ * GET /api/stats
+ * Get proxy traffic and rule statistics
+ */
+app.get('/api/stats', requireAuth, (req, res) => {
+	try {
+		res.json(proxyStats.readSnapshot());
+	} catch (error) {
+		console.error('Error getting proxy stats:', error);
+		res.status(500).json({ error: 'Failed to get proxy stats' });
 	}
 });
 

@@ -3,22 +3,50 @@
 
 const { useState } = React;
 
-const TRAFFIC = [12, 18, 14, 22, 19, 28, 24, 33, 30, 38, 31, 44, 40, 52, 46, 58, 49, 63, 55, 60, 57, 64, 59, 66];
-const CONNS = [8, 9, 11, 10, 14, 13, 17, 16, 19, 22, 20, 24, 23, 27, 30, 28, 33, 31, 35, 38, 36, 40, 39, 42];
+function ruleStatsKey(rule) {
+  const protocol = String(rule.protocol || "").toLowerCase() + ":";
+  return `${rule._t || "http"}|${protocol}|${rule.domain || ""}|${rule.path || "/"}|${rule.target || ""}`;
+}
 
-// deterministic pseudo health for a rule
-function healthFor(rule) {
+function formatBytes(n) {
+  const value = Number(n || 0);
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`;
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(2)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${Math.round(value)} B`;
+}
+
+function formatRate(bytesPerSecond) {
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+function statsForRule(stats, rule) {
+  return stats && stats.ruleStats && stats.ruleStats[ruleStatsKey(rule)];
+}
+
+function healthFor(rule, stats) {
   if (!rule.enabled) return { kind: "off", ms: "—" };
-  const seed = (rule.domain || "").length + (rule.target || "").length;
-  if (seed % 7 === 0) return { kind: "err", ms: "—" };
-  const ms = 12 + (seed * 13) % 180;
-  return { kind: ms > 150 ? "warn" : "ok", ms: ms + "ms" };
+  const item = statsForRule(stats, rule);
+  if (!item || item.requests === 0) return { kind: "off", ms: "—" };
+  const errorRate = item.errors / item.requests;
+  const ms = item.requests > 0 ? Math.round(item.durationMs / item.requests) : 0;
+  if (errorRate > 0.05) return { kind: "err", ms: ms ? `${ms}ms` : "—" };
+  return { kind: ms > 500 ? "warn" : "ok", ms: `${ms}ms` };
 }
 
 /* ===================== DASHBOARD (editorial) ===================== */
-function DashboardPage({ t, lang, http, ws, certs, go, openHttp, openWs, openCert, createBackup }) {
+function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs, openCert, createBackup }) {
   const allRules = [...http.map(r => ({ ...r, _t: "http" })), ...ws.map(r => ({ ...r, _t: "ws" }))];
-  const online = allRules.filter(r => r.enabled).length;
+  const stats = status && status.proxyStats || {};
+  const buckets = stats.minuteBuckets || [];
+  const recent = buckets.slice(-5);
+  const recentBytes = recent.reduce((sum, bucket) => sum + (bucket.bytes || 0), 0);
+  const bytesPerSecond = recent.length ? recentBytes / (recent.length * 60) : 0;
+  const peakBytesPerSecond = buckets.reduce((max, bucket) => Math.max(max, (bucket.bytes || 0) / 60), 0);
+  const chartData = buckets.length ? buckets.map(bucket => bucket.bytes || 0) : [0];
+  const activeConns = Number(stats.activeHttp || 0) + Number(stats.activeWs || 0);
+  const errRate = stats.totalRequests > 0 ? (stats.totalErrors / stats.totalRequests) * 100 : 0;
+  const healthKind = errRate > 5 ? "err" : errRate > 1 ? "warn" : "ok";
   const certSorted = [...certs].sort((a, b) => a.daysLeft - b.daysLeft);
   const expiring = certSorted.filter(c => c.daysLeft <= 30).length;
 
@@ -26,7 +54,7 @@ function DashboardPage({ t, lang, http, ws, certs, go, openHttp, openWs, openCer
     <div>
       <PageHead eyebrow={t("dash.eyebrow")} title={t("dash.title")}
         actions={<>
-          <Badge kind="ok"><Dot kind="ok" />{t("dash.ok")}</Badge>
+          <Badge kind={healthKind}><Dot kind={healthKind} />{t("dash.ok")}</Badge>
           <button className="btn btn-primary" onClick={openHttp}><Icon name="plus" size={16} />{t("http.addRule")}</button>
         </>} />
 
@@ -34,15 +62,15 @@ function DashboardPage({ t, lang, http, ws, certs, go, openHttp, openWs, openCer
       <div className="card hero">
         <div className="hero-left">
           <div className="stat-label">{t("dash.throughput24")}</div>
-          <div style={{ margin: "8px 0 2px" }}><span className="hero-num">1.84</span><span className="unit"> GB/s</span></div>
-          <div className="status-text" style={{ color: "var(--ok-text)" }}><Dot kind="ok" />{t("dash.vsYesterday")} +12%</div>
+          <div style={{ margin: "8px 0 2px" }}><span className="hero-num">{formatRate(bytesPerSecond).split(" ")[0]}</span><span className="unit"> {formatRate(bytesPerSecond).split(" ").slice(1).join(" ")}</span></div>
+          <div className="status-text" style={{ color: "var(--text-3)" }}><Dot kind={healthKind} />{formatBytes(stats.totalBytes)} · {stats.totalRequests || 0} req</div>
           <div className="hero-mini">
-            <div><div className="hm-k">{t("dash.activeConns")}</div><div className="hm-v">382</div></div>
-            <div><div className="hm-k">{t("dash.peak")}</div><div className="hm-v">2.31</div></div>
-            <div><div className="hm-k">{t("dash.errRate")}</div><div className="hm-v" style={{ color: "var(--ok-text)" }}>0.02%</div></div>
+            <div><div className="hm-k">{t("dash.activeConns")}</div><div className="hm-v">{activeConns}</div></div>
+            <div><div className="hm-k">{t("dash.peak")}</div><div className="hm-v">{formatRate(peakBytesPerSecond)}</div></div>
+            <div><div className="hm-k">{t("dash.errRate")}</div><div className="hm-v" style={{ color: healthKind === "err" ? "var(--err-text)" : healthKind === "warn" ? "var(--warn-text)" : "var(--ok-text)" }}>{errRate.toFixed(2)}%</div></div>
           </div>
         </div>
-        <div className="hero-right"><AreaChart data={TRAFFIC} h={196} /></div>
+        <div className="hero-right"><AreaChart data={chartData} h={196} /></div>
       </div>
 
       <div className="grid section-gap" style={{ gridTemplateColumns: "1.5fr 1fr" }}>
@@ -58,7 +86,7 @@ function DashboardPage({ t, lang, http, ws, certs, go, openHttp, openWs, openCer
               : <table className="table">
                 <tbody>
                   {allRules.slice(0, 6).map((r) => {
-                    const h = healthFor(r);
+                    const h = healthFor(r, stats);
                     return (
                       <tr key={r._t + r.id}>
                         <td style={{ width: 28 }}><Dot kind={h.kind} /></td>
