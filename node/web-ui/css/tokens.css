@@ -1,0 +1,119 @@
+/* ============================================================
+   Proxy Admin — Design Tokens
+   First-principles, near-monochrome. One accent. Color = meaning.
+   ============================================================ */
+
+/* Fonts loaded via <link> in HTML. Stacks below. */
+
+:root {
+  /* ---- Type ---- */
+  --font-sans: "Hanken Grotesk", "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---- Cool-toned neutral ramp (light) ---- */
+  --n-0:  oklch(0.995 0.002 265);   /* page bg */
+  --n-25: oklch(0.985 0.003 265);
+  --n-50: oklch(0.972 0.004 265);   /* subtle fill */
+  --n-100:oklch(0.948 0.005 265);   /* hover fill */
+  --n-150:oklch(0.918 0.006 265);   /* border */
+  --n-200:oklch(0.882 0.007 265);   /* strong border */
+  --n-300:oklch(0.79 0.009 265);
+  --n-400:oklch(0.66 0.011 265);    /* muted text / icons */
+  --n-500:oklch(0.55 0.012 265);    /* secondary text */
+  --n-600:oklch(0.45 0.013 265);
+  --n-700:oklch(0.36 0.013 265);
+  --n-800:oklch(0.27 0.012 265);    /* headings */
+  --n-900:oklch(0.21 0.011 265);    /* primary text */
+  --n-950:oklch(0.15 0.01 265);
+
+  /* ---- Single brand accent: calm indigo ---- */
+  --accent:        oklch(0.54 0.15 264);
+  --accent-hover:  oklch(0.485 0.155 264);
+  --accent-soft:   oklch(0.95 0.03 264);
+  --accent-border: oklch(0.86 0.06 264);
+  --accent-text:   oklch(0.47 0.16 264);
+
+  /* ---- Semantic status (used ONLY for state, never decoration) ---- */
+  --ok:        oklch(0.6 0.13 155);
+  --ok-soft:   oklch(0.95 0.04 155);
+  --ok-text:   oklch(0.5 0.13 155);
+  --warn:      oklch(0.74 0.13 70);
+  --warn-soft: oklch(0.96 0.05 75);
+  --warn-text: oklch(0.55 0.12 60);
+  --err:       oklch(0.6 0.19 22);
+  --err-soft:  oklch(0.95 0.04 22);
+  --err-text:  oklch(0.53 0.19 22);
+
+  /* ---- Roles ---- */
+  --bg:        var(--n-0);
+  --surface:   #ffffff;
+  --surface-2: var(--n-50);
+  --fill:      var(--n-50);
+  --fill-hover:var(--n-100);
+  --border:    var(--n-150);
+  --border-strong: var(--n-200);
+  --text:      var(--n-900);
+  --text-2:    var(--n-500);
+  --text-3:    var(--n-400);
+  --heading:   var(--n-950);
+
+  --radius:    10px;
+  --radius-sm: 7px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.05), 0 1px 1px oklch(0.2 0.02 265 / 0.04);
+  --shadow:    0 4px 16px -4px oklch(0.2 0.02 265 / 0.10), 0 2px 6px -2px oklch(0.2 0.02 265 / 0.06);
+  --shadow-lg: 0 18px 50px -12px oklch(0.2 0.02 265 / 0.22);
+
+  --sidebar-w: 248px;
+}
+
+[data-theme="dark"] {
+  --n-0:  oklch(0.17 0.008 265);
+  --n-25: oklch(0.185 0.009 265);
+  --n-50: oklch(0.205 0.01 265);
+  --n-100:oklch(0.235 0.011 265);
+  --n-150:oklch(0.27 0.012 265);
+  --n-200:oklch(0.32 0.013 265);
+  --n-300:oklch(0.4 0.013 265);
+  --n-400:oklch(0.55 0.013 265);
+  --n-500:oklch(0.66 0.012 265);
+  --n-600:oklch(0.74 0.011 265);
+  --n-700:oklch(0.82 0.009 265);
+  --n-800:oklch(0.9 0.007 265);
+  --n-900:oklch(0.95 0.005 265);
+  --n-950:oklch(0.98 0.004 265);
+
+  --accent:        oklch(0.66 0.14 264);
+  --accent-hover:  oklch(0.72 0.14 264);
+  --accent-soft:   oklch(0.3 0.06 264);
+  --accent-border: oklch(0.42 0.09 264);
+  --accent-text:   oklch(0.78 0.12 264);
+
+  --ok:        oklch(0.68 0.13 155);
+  --ok-soft:   oklch(0.3 0.05 155);
+  --ok-text:   oklch(0.76 0.12 155);
+  --warn:      oklch(0.78 0.12 75);
+  --warn-soft: oklch(0.32 0.05 75);
+  --warn-text: oklch(0.82 0.1 75);
+  --err:       oklch(0.66 0.18 22);
+  --err-soft:  oklch(0.32 0.07 22);
+  --err-text:  oklch(0.78 0.15 22);
+
+  --bg:        var(--n-0);
+  --surface:   var(--n-25);
+  --surface-2: var(--n-50);
+  --fill:      var(--n-50);
+  --fill-hover:var(--n-100);
+  --border:    var(--n-150);
+  --border-strong: var(--n-200);
+  --text:      var(--n-900);
+  --text-2:    var(--n-500);
+  --text-3:    var(--n-400);
+  --heading:   var(--n-950);
+
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow:    0 4px 16px -4px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 18px 50px -12px oklch(0 0 0 / 0.6);
+}
+
+* { box-sizing: border-box; }
