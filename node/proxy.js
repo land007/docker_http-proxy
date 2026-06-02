@@ -475,10 +475,14 @@ const _requestListener = async function(req, res) {
 	}
 	// 没有命中
 	if (!have_http_proxy_path) {
+		let responseBytes = 0;
+		const body = 'Welcome to my server! host:' + host + ' pathname:' + pathname;
+		responseBytes = Buffer.byteLength(body);
+		proxyStats.recordUnmatched('http', 200, responseBytes, 0);
 		res.writeHead(200, {
 			'Content-Type': 'text/plain'
 		});
-		res.end('Welcome to my server! host:' + host + ' pathname:' + pathname);
+		res.end(body);
 	}
 };
 
@@ -533,6 +537,7 @@ const _upgrade = function(req, socket, head) {
 		_token = _session._token;
 		consoleLog('_token', _token);
 	}
+	let have_ws_proxy_path = false;
 	for (let w in ws_proxy_paths) {
 		// 检查登录信息
 		if(!check(req, w, _token)) {
@@ -540,6 +545,7 @@ const _upgrade = function(req, socket, head) {
 			return;
 		}
 		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
+			have_ws_proxy_path = true;
 			const statsSample = proxyStats.openWs(buildRuleStatsMeta('ws', w));
 			let statsClosed = false;
 			const closeStats = (hadError) => {
@@ -585,6 +591,9 @@ const _upgrade = function(req, socket, head) {
 			}
 			break;
 		}
+	}
+	if (!have_ws_proxy_path) {
+		proxyStats.recordUnmatched('ws', 404, 0, 0);
 	}
 };
 

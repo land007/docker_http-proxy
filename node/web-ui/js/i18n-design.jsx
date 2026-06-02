@@ -14,7 +14,7 @@ const I18N = {
     dash: {
       eyebrow: "实时", title: "运行概览", ok: "系统正常",
       throughput24: "过去 24 小时吞吐", vsYesterday: "较昨日", peak: "峰值", activeConns: "活跃连接",
-      errRate: "错误率", rules: "规则", certs: "证书", quick: "快速操作",
+      errRate: "5xx 错误率", clientErrRate: "4xx 比例", requestRate: "请求速率", rules: "规则", certs: "证书", quick: "快速操作",
       expiringSoon: "即将到期", uploadCert: "上传证书", createBackup: "创建备份",
       ruleHealth: "规则健康", certExpiry: "证书到期", viewAll: "查看全部", latency: "延迟", daysLeft: "天后到期",
     },
@@ -58,7 +58,7 @@ const I18N = {
     dash: {
       eyebrow: "Live", title: "Overview", ok: "System healthy",
       throughput24: "Throughput · last 24h", vsYesterday: "vs yesterday", peak: "Peak", activeConns: "Active connections",
-      errRate: "Error rate", rules: "Rules", certs: "Certificates", quick: "Quick actions",
+      errRate: "5xx error rate", clientErrRate: "4xx rate", requestRate: "Request rate", rules: "Rules", certs: "Certificates", quick: "Quick actions",
       expiringSoon: "expiring soon", uploadCert: "Upload cert", createBackup: "Create backup",
       ruleHealth: "Rule health", certExpiry: "Certificate expiry", viewAll: "View all", latency: "Latency", daysLeft: "days left",
     },

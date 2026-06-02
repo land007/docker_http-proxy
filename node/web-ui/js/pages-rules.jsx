@@ -4,6 +4,7 @@
 const { useState } = React;
 
 function ruleStatsKey(rule) {
+  if (rule._unmatched) return "unmatched";
   const protocol = String(rule.protocol || "").toLowerCase() + ":";
   return `${rule._t || "http"}|${protocol}|${rule.domain || ""}|${rule.path || "/"}|${rule.target || ""}`;
 }
@@ -28,25 +29,42 @@ function healthFor(rule, stats) {
   if (!rule.enabled) return { kind: "off", ms: "—" };
   const item = statsForRule(stats, rule);
   if (!item || item.requests === 0) return { kind: "off", ms: "—" };
-  const errorRate = item.errors / item.requests;
+  const errorRate = (item.serverErrors || item.errors || 0) / item.requests;
   const ms = item.requests > 0 ? Math.round(item.durationMs / item.requests) : 0;
   if (errorRate > 0.05) return { kind: "err", ms: ms ? `${ms}ms` : "—" };
   return { kind: ms > 500 ? "warn" : "ok", ms: `${ms}ms` };
 }
 
+function ruleSortScore(rule, stats) {
+  const item = statsForRule(stats, rule);
+  if (!item) return rule.enabled ? 1 : 0;
+  const ms = item.requests > 0 ? item.durationMs / item.requests : 0;
+  const recent = item.lastSeenAt ? Math.max(0, 10000000000000 - (Date.now() - new Date(item.lastSeenAt).getTime())) / 10000000000000 : 0;
+  return (item.serverErrors || item.errors || 0) * 100000 + (ms > 500 ? 10000 : 0) + item.active * 1000 + recent * 100 + item.requests;
+}
+
 /* ===================== DASHBOARD (editorial) ===================== */
 function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs, openCert, createBackup }) {
-  const allRules = [...http.map(r => ({ ...r, _t: "http" })), ...ws.map(r => ({ ...r, _t: "ws" }))];
   const stats = status && status.proxyStats || {};
+  const unmatchedStats = stats.ruleStats && stats.ruleStats.unmatched;
+  const unmatchedRule = unmatchedStats && unmatchedStats.requests > 0
+    ? [{ id: "unmatched", _t: "http", _unmatched: true, enabled: true, domain: t("common.none"), path: "", target: "unmatched", protocol: "HTTP" }]
+    : [];
+  const allRules = [...http.map(r => ({ ...r, _t: "http" })), ...ws.map(r => ({ ...r, _t: "ws" })), ...unmatchedRule];
   const buckets = stats.minuteBuckets || [];
   const recent = buckets.slice(-5);
   const recentBytes = recent.reduce((sum, bucket) => sum + (bucket.bytes || 0), 0);
+  const recentRequests = recent.reduce((sum, bucket) => sum + (bucket.requests || 0), 0);
   const bytesPerSecond = recent.length ? recentBytes / (recent.length * 60) : 0;
+  const requestsPerMinute = recent.length ? recentRequests / recent.length : 0;
   const peakBytesPerSecond = buckets.reduce((max, bucket) => Math.max(max, (bucket.bytes || 0) / 60), 0);
   const chartData = buckets.length ? buckets.map(bucket => bucket.bytes || 0) : [0];
+  const requestChartData = buckets.length ? buckets.map(bucket => bucket.requests || 0) : [0];
   const activeConns = Number(stats.activeHttp || 0) + Number(stats.activeWs || 0);
-  const errRate = stats.totalRequests > 0 ? (stats.totalErrors / stats.totalRequests) * 100 : 0;
+  const errRate = stats.totalRequests > 0 ? ((stats.totalServerErrors || stats.totalErrors || 0) / stats.totalRequests) * 100 : 0;
+  const clientErrRate = stats.totalRequests > 0 ? ((stats.totalClientErrors || 0) / stats.totalRequests) * 100 : 0;
   const healthKind = errRate > 5 ? "err" : errRate > 1 ? "warn" : "ok";
+  const sortedRules = [...allRules].sort((a, b) => ruleSortScore(b, stats) - ruleSortScore(a, stats));
   const certSorted = [...certs].sort((a, b) => a.daysLeft - b.daysLeft);
   const expiring = certSorted.filter(c => c.daysLeft <= 30).length;
 
@@ -68,9 +86,17 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs,
             <div><div className="hm-k">{t("dash.activeConns")}</div><div className="hm-v">{activeConns}</div></div>
             <div><div className="hm-k">{t("dash.peak")}</div><div className="hm-v">{formatRate(peakBytesPerSecond)}</div></div>
             <div><div className="hm-k">{t("dash.errRate")}</div><div className="hm-v" style={{ color: healthKind === "err" ? "var(--err-text)" : healthKind === "warn" ? "var(--warn-text)" : "var(--ok-text)" }}>{errRate.toFixed(2)}%</div></div>
+            <div><div className="hm-k">{t("dash.clientErrRate")}</div><div className="hm-v" style={{ color: clientErrRate > 10 ? "var(--warn-text)" : "var(--text)" }}>{clientErrRate.toFixed(2)}%</div></div>
+            <div><div className="hm-k">{t("dash.requestRate")}</div><div className="hm-v">{requestsPerMinute.toFixed(1)}/m</div></div>
           </div>
         </div>
-        <div className="hero-right"><AreaChart data={chartData} h={196} /></div>
+        <div className="hero-right">
+          <AreaChart data={chartData} h={172} />
+          <div className="rowsplit" style={{ borderBottom: "none", padding: "12px 0 0" }}>
+            <span className="status-text">{t("dash.requestRate")} · {requestsPerMinute.toFixed(1)}/m</span>
+            <Spark data={requestChartData} w={110} h={30} />
+          </div>
+        </div>
       </div>
 
       <div className="grid section-gap" style={{ gridTemplateColumns: "1.5fr 1fr" }}>
@@ -85,14 +111,16 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs,
               ? <Empty icon="http" title={t("http.empty")} sub={t("http.emptySub")} />
               : <table className="table">
                 <tbody>
-                  {allRules.slice(0, 6).map((r) => {
+                  {sortedRules.slice(0, 6).map((r) => {
                     const h = healthFor(r, stats);
+                    const item = statsForRule(stats, r);
                     return (
                       <tr key={r._t + r.id}>
                         <td style={{ width: 28 }}><Dot kind={h.kind} /></td>
                         <td className="mono cell-host">{r.domain}</td>
                         <td><Badge kind="neutral" className="badge-proto">{r.protocol}</Badge></td>
                         <td className="mono cell-dim">→ {r.target}</td>
+                        <td className="mono cell-dim">{item ? `${item.requests} req · ${item.serverErrors || item.errors || 0} 5xx` : "—"}</td>
                         <td className="mono td-right" style={{ color: h.kind === "err" ? "var(--err-text)" : h.kind === "warn" ? "var(--warn-text)" : "var(--text-2)" }}>{h.ms}</td>
                       </tr>
                     );
@@ -250,4 +278,4 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
   );
 }
 
-Object.assign(window, { DashboardPage, RulesPage, RuleModal, TRAFFIC, CONNS });
+Object.assign(window, { DashboardPage, RulesPage, RuleModal });
