@@ -11,7 +11,9 @@ const crypto = require('crypto');
 const ADMIN_USERS_PATH = path.join(__dirname, 'admin_users.json');
 const SALT_ROUNDS = 10;
 const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD-Admin';
-const SESSION_MAX_AGE = 30 * 60 * 1000; // 30 minutes
+// Session lifetime (default 24h). Overridable via ADMIN_SESSION_MAX_AGE_MS.
+// Combined with rolling sessions, active users are not logged out mid-task.
+const SESSION_MAX_AGE = parseInt(process.env.ADMIN_SESSION_MAX_AGE_MS, 10) || 24 * 60 * 60 * 1000;
 
 class AuthManager {
 	constructor() {

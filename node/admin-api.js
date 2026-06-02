@@ -46,6 +46,7 @@ app.use(session({
 	}),
 	resave: false,
 	saveUninitialized: false,
+	rolling: true, // refresh the cookie/expiry on each request so active users stay logged in
 	cookie: {
 		secure: false, // Set to true if using HTTPS
 		httpOnly: true,
