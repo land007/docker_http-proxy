@@ -414,10 +414,11 @@ class ProxyConfigLoader {
 		// Update timestamp
 		config.lastModified = new Date().toISOString();
 
-		// Write to temp file first, then rename (atomic operation)
-		const tempPath = CONFIG_PATH + '.tmp';
-		fs.writeFileSync(tempPath, JSON.stringify(config, null, 2), 'utf-8');
-		fs.renameSync(tempPath, CONFIG_PATH);
+		// Write directly to the config file (preserves the inode). A rename-based "atomic"
+		// write breaks Docker single-file bind mounts (e.g. ./proxy-config.json:/node_/proxy-config.json)
+		// with EBUSY and silently fails to persist. A fresh backup is always taken above, so a
+		// direct write is safe here.
+		fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 
 		this.config = config;
 		console.log('💾 Configuration saved successfully');

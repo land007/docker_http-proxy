@@ -5,13 +5,14 @@ const basicAuth = require('basic-auth');
 const crypto = require('crypto');
 const url = require("url");
 const fs = require("fs");
-const tls = require("tls");
-const path = require("path");
+const tls = require('tls');
+const path = require('path');
 const sep = path.sep;
 const net = require('net');
 const NodeSession = require('node-session');
 const util = require('util');
 const readFile = util.promisify(fs.readFile);
+const configLoader = require('./proxy-config-loader');
 
 var nodeSession = new NodeSession({
 	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
@@ -32,26 +33,90 @@ var readJson = async function(filename) {
 	}
 };
 
+// Load configuration from config loader (supports hot-reload)
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
-var usernames = (process.env['usernames'] || '').split(',');
-var passwords = (process.env['passwords'] || '').split(',');
-var max_session = parseInt(process.env['max_session'] || '0');
-var http_proxy_protocols = (process.env['http_proxy_protocols'] || '').split(',');
-var http_proxy_domains = (process.env['http_proxy_domains'] || '').split(',');
-var http_proxy_paths = (process.env['http_proxy_paths'] || '').split(',');
-var http_proxy_hosts = (process.env['http_proxy_hosts'] || '').split(',');
-var http_proxy_ports = (process.env['http_proxy_ports'] || '').split(',');
-var http_proxy_pretends = (process.env['http_proxy_pretends'] || '').split(',');
+var usernames = [];
+var passwords = [];
+var max_session = 0;
+var http_proxy_protocols = [];
+var http_proxy_domains = [];
+var http_proxy_paths = [];
+var http_proxy_hosts = [];
+var http_proxy_ports = [];
+var http_proxy_pretends = [];
 
-var ws_proxy_protocols = (process.env['ws_proxy_protocols'] || '').split(',');
-var ws_proxy_domains = (process.env['ws_proxy_domains'] || '').split(',');
-var ws_proxy_paths = (process.env['ws_proxy_paths'] || '').split(',');
-var ws_proxy_hosts = (process.env['ws_proxy_hosts'] || '').split(',');
-var ws_proxy_ports = (process.env['ws_proxy_ports'] || '').split(',');
-var ws_proxy_pretends = (process.env['ws_proxy_pretends'] || '').split(',');
+var ws_proxy_protocols = [];
+var ws_proxy_domains = [];
+var ws_proxy_paths = [];
+var ws_proxy_hosts = [];
+var ws_proxy_ports = [];
+var ws_proxy_pretends = [];
 
 var domainName = process.env['DOMAIN_NAME'] || "voice.qhkly.com"; // e.g., "westus"
+
+// Function to update configuration from config loader
+function updateConfiguration() {
+	const config = configLoader.getConfig();
+
+	if (!config) {
+		console.warn('⚠️  Configuration not loaded, using environment variables or defaults');
+		return;
+	}
+
+	// Update settings
+	if (config.settings) {
+		max_session = config.settings.maxSession || 0;
+
+		if (config.settings.defaultAuth && config.settings.defaultAuth.enabled) {
+			username = config.settings.defaultAuth.username;
+			password = config.settings.defaultAuth.password;
+		}
+	}
+
+	// Update HTTP proxy rules
+	const httpConfig = configLoader.getHttpProxyArrays();
+	http_proxy_protocols = httpConfig.protocols;
+	http_proxy_domains = httpConfig.domains;
+	http_proxy_paths = httpConfig.paths;
+	http_proxy_hosts = httpConfig.hosts;
+	http_proxy_ports = httpConfig.ports;
+	http_proxy_pretends = httpConfig.pretends;
+
+	// Update WebSocket proxy rules
+	const wsConfig = configLoader.getWsProxyArrays();
+	ws_proxy_protocols = wsConfig.protocols;
+	ws_proxy_domains = wsConfig.domains;
+	ws_proxy_paths = wsConfig.paths;
+	ws_proxy_hosts = wsConfig.hosts;
+	ws_proxy_ports = wsConfig.ports;
+	ws_proxy_pretends = wsConfig.pretends;
+
+	console.log('🔄 Configuration updated from config loader');
+}
+
+// Initialize configuration loader and register for hot-reload
+async function initializeConfiguration() {
+	try {
+		console.log('🔧 Initializing configuration loader...');
+		await configLoader.initialize();
+		updateConfiguration();
+
+		// Register for configuration reloads
+		configLoader.onReload((newConfig, oldConfig) => {
+			console.log('🔄 Configuration reloaded, updating proxy...');
+			updateConfiguration();
+		});
+
+		console.log('✅ Configuration loader initialized');
+	} catch (error) {
+		console.error('⛔ Error initializing configuration loader:', error);
+		console.log('⚠️  Falling back to environment variables');
+	}
+}
+
+// Start configuration initialization (async)
+initializeConfiguration();
 
 var httpPort = 80;
 var httpsPort = 443;
@@ -72,34 +137,101 @@ const getSecureContext = function(domain) {
 	return credentials.context;
 }
 
-//read them into memory
-const secureContext = {
-	'www.gjxt.xyz': getSecureContext('www.gjxt.xyz')
+//safely build a secure context; returns null when the cert files are missing/unreadable
+const tryGetSecureContext = function(domain) {
+	try {
+		return getSecureContext(domain);
+	} catch (error) {
+		console.warn(`⚠️  Certificate for "${domain}" not available: ${error.message}`);
+		return null;
+	}
 }
 
-secureContext[domainName] = getSecureContext(domainName);
+//ensure there is always at least one usable key/cert so the HTTPS server can start,
+//even before any real certificate has been issued (e.g. a fresh ACME deployment with an empty cert dir)
+const DEFAULT_CERT_DOMAIN = '_default';
+const ensureDefaultCertDomain = function() {
+	const certDir = __dirname + sep + 'cert';
+	const candidates = ['www.gjxt.xyz', domainName];
+	try {
+		fs.readdirSync(certDir)
+			.filter(f => f.endsWith('_chain.crt'))
+			.forEach(f => candidates.push(f.replace('_chain.crt', '')));
+	} catch (e) { /* cert dir may not exist yet */ }
+
+	for (const d of candidates) {
+		if (!d) continue;
+		if (fs.existsSync(certDir + sep + d + '_key.key') && fs.existsSync(certDir + sep + d + '_chain.crt')) {
+			return d;
+		}
+	}
+
+	// nothing available: generate a throwaway self-signed cert so TLS can bootstrap
+	if (!fs.existsSync(certDir)) {
+		fs.mkdirSync(certDir, { recursive: true });
+	}
+	const keyPath = certDir + sep + DEFAULT_CERT_DOMAIN + '_key.key';
+	const certPath = certDir + sep + DEFAULT_CERT_DOMAIN + '_chain.crt';
+	require('child_process').execSync(
+		`openssl req -x509 -newkey rsa:2048 -nodes -keyout "${keyPath}" -out "${certPath}" -days 3650 -subj "/CN=localhost"`,
+		{ stdio: 'ignore' }
+	);
+	console.warn('⚠️  No certificate found; generated a temporary self-signed certificate for HTTPS bootstrap');
+	return DEFAULT_CERT_DOMAIN;
+}
+
+const defaultCertDomain = ensureDefaultCertDomain();
+
+//read available certs into memory (skip any missing so startup can't crash)
+const secureContext = {};
+['www.gjxt.xyz', domainName, defaultCertDomain].forEach(function(d) {
+	if (!d || secureContext[d]) return;
+	const ctx = tryGetSecureContext(d);
+	if (ctx) secureContext[d] = ctx;
+});
+
+// Load additional certificates from config
+function loadCertificates() {
+	const config = configLoader.getConfig();
+	if (config && config.sslCertificates) {
+		config.sslCertificates.forEach(cert => {
+			try {
+				const certPath = path.join(__dirname, cert.certFile);
+				const keyPath = path.join(__dirname, cert.keyFile);
+
+				if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+					secureContext[cert.domain] = getSecureContext(cert.domain);
+					console.log(`✅ Loaded certificate for domain: ${cert.domain}`);
+				}
+			} catch (error) {
+				console.error(`⛔ Error loading certificate for ${cert.domain}:`, error);
+			}
+		});
+	}
+}
+
+// Load certificates after config is initialized
+setTimeout(() => {
+	try {
+		loadCertificates();
+	} catch (error) {
+		console.error('⛔ Error loading certificates:', error);
+	}
+}, 1000);
 
 const options = {
 	SNICallback: function(domain, cb) {
-		if (secureContext[domain]) {
-			if (cb) {
-				cb(null, secureContext[domain]);
-			} else {
-				// compatibility for older versions of node
-				return secureContext[domain];
-			}
+		const ctx = secureContext[domain] || secureContext[defaultCertDomain] || secureContext['www.gjxt.xyz'];
+		if (cb) {
+			cb(null, ctx);
 		} else {
-			if (cb) {
-				cb(null, secureContext['www.gjxt.xyz']);
-			} else {
-				// compatibility for older versions of node
-				return secureContext['www.gjxt.xyz'];
-			}
-			//throw new Error('No keys/certificates for domain requested');
+			// compatibility for older versions of node
+			return ctx;
 		}
+		//throw new Error('No keys/certificates for domain requested');
 	},
-	key: fs.readFileSync(__dirname + sep + 'cert' + sep + 'www.gjxt.xyz' + '_key.key'),
-	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + 'www.gjxt.xyz' + '_chain.crt')
+	key: fs.readFileSync(__dirname + sep + 'cert' + sep + defaultCertDomain + '_key.key'),
+	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + defaultCertDomain + '_chain.crt')
 };
 
 const getClientIp = function(req) {
@@ -123,7 +255,7 @@ const _userSession = {};
 
 var users_list;
 const init = async function() {
-	users_list = await readJson('users_list.json');
+	users_list = await readJson(path.join(__dirname, 'users_list.json'));
 };
 init();
 setInterval(init, 5000);
@@ -291,7 +423,7 @@ const requestListener = function(req, res) {
 const netListener = function(socket) {
 	socket.once('data', function(buf) {
 		consoleLog(buf[0]);
-		// https数据流的第一位是十六进制“16”，转换成十进制就是22
+		// https数据流的第一位是十六进制"16"，转换成十进制就是22
 		let address = buf[0] === 22 ? httpsPort : httpPort;
 		//创建一个指向https或http服务器的链接
 		let proxy = net.createConnection(address, function() {

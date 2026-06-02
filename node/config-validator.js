@@ -116,15 +116,23 @@ class ConfigValidator {
 			errors.push(...certErrors);
 		}
 
-		// Validate SSL certificate files exist
+		// Check SSL certificate files on disk. A missing cert file must NOT make the whole
+		// configuration invalid (that would prevent the service - and the admin UI used to fix
+		// it - from starting, e.g. on a fresh ACME deployment before any cert is issued).
+		// Report these as non-fatal warnings instead.
+		const warnings = [];
 		if (config.sslCertificates) {
 			const fileErrors = this.validateCertFiles(config.sslCertificates);
-			errors.push(...fileErrors);
+			if (fileErrors.length > 0) {
+				warnings.push(...fileErrors);
+				fileErrors.forEach(w => console.warn(`⚠️  ${w}`));
+			}
 		}
 
 		return {
 			valid: errors.length === 0,
-			errors
+			errors,
+			warnings
 		};
 	}
 
