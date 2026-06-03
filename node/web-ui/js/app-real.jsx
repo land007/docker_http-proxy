@@ -391,6 +391,12 @@ function App() {
     toast(t("settings.saved"));
   };
 
+  const changePassword = async (payload) => {
+    const result = await api.post("/api/auth/change-password", payload);
+    if (result && result.user) setUser(result.user);
+    toast(t("settings.passwordChanged"));
+  };
+
   const createBackup = async () => {
     await api.post("/api/backups");
     await loadBackups();
@@ -440,7 +446,7 @@ function App() {
           uploadCert={uploadCert} deleteCert={deleteCert} issueAcme={issueAcme} renewAcme={renewAcme} toast={toast} />}
         {route === "ddns" && <DdnsPage t={t} lang={lang} config={ddns} status={ddnsStatus} providers={ddnsProviders} modalOpen={mOpen("ddns")} setModalOpen={setMOpen("ddns")}
           save={saveDdns} remove={deleteDdns} sync={syncDdns} toast={toast} />}
-        {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} toast={toast} />}
+        {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} changePassword={changePassword} toast={toast} />}
         {route === "backup" && <BackupPage t={t} lang={lang} backups={backups} createBackup={createBackup} restoreBackup={restoreBackup} deleteBackup={deleteBackup} toast={toast} />}
       </main>
 

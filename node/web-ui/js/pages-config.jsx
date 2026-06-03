@@ -177,11 +177,25 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
 }
 
 /* ===================== SETTINGS ===================== */
-function SettingsPage({ t, settings, saveSettings, toast }) {
+function SettingsPage({ t, settings, saveSettings, changePassword, toast }) {
   const [f, setF] = useStateC(settings);
+  const [pw, setPw] = useStateC({ oldPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwBusy, setPwBusy] = useStateC(false);
   React.useEffect(() => setF(settings), [settings]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const save = () => saveSettings(f);
+  const setP = (k, v) => setPw(s => ({ ...s, [k]: v }));
+  const savePassword = async () => {
+    if (!pw.oldPassword || !pw.newPassword || pw.newPassword.length < 6 || pw.newPassword !== pw.confirmPassword) return;
+    setPwBusy(true);
+    try {
+      await changePassword({ oldPassword: pw.oldPassword, newPassword: pw.newPassword });
+      setPw({ oldPassword: "", newPassword: "", confirmPassword: "" });
+    } finally {
+      setPwBusy(false);
+    }
+  };
+  const pwInvalid = !pw.oldPassword || !pw.newPassword || pw.newPassword.length < 6 || pw.newPassword !== pw.confirmPassword || pwBusy;
   return (
     <div>
       <PageHead eyebrow={t("settings.eyebrow")} title={t("settings.title")} sub={t("settings.sub")} />
@@ -206,6 +220,28 @@ function SettingsPage({ t, settings, saveSettings, toast }) {
             </span>
           </label>
           <button className="btn btn-primary" onClick={save}><Icon name="download" size={16} />{t("settings.save")}</button>
+        </div>
+      </div>
+      <div className="card section-gap" style={{ maxWidth: 720 }}>
+        <div className="card-body">
+          <div className="card-head" style={{ padding: 0, marginBottom: 16 }}>
+            <h3>{t("settings.passwordTitle")}</h3>
+            <span className="hint">{t("settings.passwordSub")}</span>
+          </div>
+          <Field label={t("settings.currentPassword")} req>
+            <input className="input mono" type="password" autoComplete="current-password" value={pw.oldPassword} onChange={(e) => setP("oldPassword", e.target.value)} />
+          </Field>
+          <div className="field-row">
+            <Field label={t("settings.newPassword")} hint={t("settings.newPasswordHint")} req>
+              <input className="input mono" type="password" autoComplete="new-password" value={pw.newPassword} onChange={(e) => setP("newPassword", e.target.value)} />
+            </Field>
+            <Field label={t("settings.confirmPassword")} hint={pw.confirmPassword && pw.newPassword !== pw.confirmPassword ? t("settings.passwordMismatch") : null} req>
+              <input className="input mono" type="password" autoComplete="new-password" value={pw.confirmPassword} onChange={(e) => setP("confirmPassword", e.target.value)} />
+            </Field>
+          </div>
+          <button className="btn btn-primary" disabled={pwInvalid} onClick={savePassword}>
+            <Icon name="download" size={16} />{pwBusy ? t("settings.savingPassword") : t("settings.changePassword")}
+          </button>
         </div>
       </div>
     </div>
