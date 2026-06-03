@@ -180,22 +180,42 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
 function SettingsPage({ t, settings, saveSettings, changePassword, toast, forcePasswordChange }) {
   const [f, setF] = useStateC(settings);
   const [pw, setPw] = useStateC({ oldPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwError, setPwError] = useStateC("");
   const [pwBusy, setPwBusy] = useStateC(false);
   React.useEffect(() => setF(settings), [settings]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const save = () => saveSettings(f);
-  const setP = (k, v) => setPw(s => ({ ...s, [k]: v }));
+  const setP = (k, v) => {
+    setPwError("");
+    setPw(s => ({ ...s, [k]: v }));
+  };
   const savePassword = async () => {
-    if (!pw.oldPassword || !pw.newPassword || pw.newPassword.length < 6 || pw.newPassword !== pw.confirmPassword) return;
+    if (!pw.oldPassword) {
+      setPwError(t("settings.currentPasswordRequired"));
+      return;
+    }
+    if (!pw.newPassword || pw.newPassword.length < 6) {
+      setPwError(t("settings.newPasswordHint"));
+      return;
+    }
+    if (pw.newPassword !== pw.confirmPassword) {
+      setPwError(t("settings.passwordMismatch"));
+      return;
+    }
     setPwBusy(true);
     try {
       await changePassword({ oldPassword: pw.oldPassword, newPassword: pw.newPassword });
       setPw({ oldPassword: "", newPassword: "", confirmPassword: "" });
+      setPwError("");
+    } catch (error) {
+      const message = error && error.message ? error.message : t("settings.passwordChangeFailed");
+      setPwError(message);
+      toast(message);
     } finally {
       setPwBusy(false);
     }
   };
-  const pwInvalid = !pw.oldPassword || !pw.newPassword || pw.newPassword.length < 6 || pw.newPassword !== pw.confirmPassword || pwBusy;
+  const pwInvalid = pwBusy;
   return (
     <div>
       <PageHead eyebrow={t("settings.eyebrow")} title={t("settings.title")} sub={t("settings.sub")} />
@@ -242,6 +262,7 @@ function SettingsPage({ t, settings, saveSettings, changePassword, toast, forceP
               <input className="input mono" type="password" autoComplete="new-password" value={pw.confirmPassword} onChange={(e) => setP("confirmPassword", e.target.value)} />
             </Field>
           </div>
+          {pwError && <div className="hint" style={{ color: "var(--err)", margin: "-4px 0 14px" }}>{pwError}</div>}
           <button className="btn btn-primary" disabled={pwInvalid} onClick={savePassword}>
             <Icon name="download" size={16} />{pwBusy ? t("settings.savingPassword") : t("settings.changePassword")}
           </button>
