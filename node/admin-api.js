@@ -759,12 +759,16 @@ app.post('/api/acme/issue', requireAuth, [
 	body('domain').isString().notEmpty(),
 	body('dnsProvider').isString().notEmpty(),
 	body('server').optional({ nullable: true, checkFalsy: true }).isString(),
+	body('eabKid').optional({ nullable: true, checkFalsy: true }).isString(),
+	body('eabHmacKey').optional({ nullable: true, checkFalsy: true }).isString(),
 	body('credentials').optional().isObject()
 ], handleValidationErrors, async (req, res) => {
 	try {
 		const result = await acmeManager.issue(req.body.domain, {
 			dnsProvider: req.body.dnsProvider,
 			server: req.body.server,
+			eabKid: req.body.eabKid,
+			eabHmacKey: req.body.eabHmacKey,
 			credentials: req.body.credentials || {}
 		});
 
@@ -1009,6 +1013,7 @@ async function startServer() {
 			console.log('⚠️  Default admin credentials: admin / admin123');
 			console.log('⚠️  Please change the default password immediately!');
 			console.log('');
+			acmeManager.startAutoRenewal();
 		});
 
 	} catch (error) {
@@ -1023,12 +1028,14 @@ startServer();
 // Graceful shutdown
 process.on('SIGTERM', () => {
 	console.log('🛑 Received SIGTERM, shutting down gracefully...');
+	acmeManager.stopAutoRenewal();
 	configLoader.stopWatching();
 	process.exit(0);
 });
 
 process.on('SIGINT', () => {
 	console.log('🛑 Received SIGINT, shutting down gracefully...');
+	acmeManager.stopAutoRenewal();
 	configLoader.stopWatching();
 	process.exit(0);
 });

@@ -4,17 +4,39 @@
 const { useState: useStateC } = React;
 
 /* ===================== CERTIFICATES ===================== */
+const CRED_LINKS = {
+  CF_Token: "https://dash.cloudflare.com/profile/api-tokens",
+  CF_Account_ID: "https://dash.cloudflare.com/profile/api-tokens",
+  CF_Key: "https://dash.cloudflare.com/profile/api-tokens",
+  DP_Id: "https://console.dnspod.cn/account/token",
+  DP_Key: "https://console.dnspod.cn/account/token",
+  Ali_Key: "https://ram.console.aliyun.com/manage/ak",
+  Ali_Secret: "https://ram.console.aliyun.com/manage/ak",
+  EAB_KID: "https://app.zerossl.com/developer",
+  EAB_HMAC_KEY: "https://app.zerossl.com/developer",
+};
+
 function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, deleteCert, issueAcme, renewAcme, toast }) {
   const [up, setUp] = useStateC({ domain: "", certFile: null, keyFile: null });
   const providers = acme.providers || [];
   const firstProvider = providers[0] && providers[0].id || "";
-  const [form, setForm] = useStateC({ domain: "", provider: firstProvider, url: acme.defaultServer || "", credentials: {} });
+  const [form, setForm] = useStateC({ domain: "", provider: firstProvider, url: acme.defaultServer || "", credentials: {}, eabKid: "", eabHmacKey: "" });
   const setF = (k, v) => setForm(s => ({ ...s, [k]: v }));
   React.useEffect(() => {
     setForm(s => ({ ...s, provider: s.provider || firstProvider, url: s.url || acme.defaultServer || "" }));
   }, [firstProvider, acme.defaultServer]);
   const provider = providers.find(p => p.id === form.provider);
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short", day: "numeric" }) : t("common.none");
+  const maybeT = (key) => {
+    const value = t(key);
+    return value === key ? "" : value;
+  };
+  const credHint = (name) => {
+    const text = maybeT("cert.credHint." + name);
+    const link = CRED_LINKS[name];
+    if (!text && !link) return null;
+    return <>{text} {link && <a href={link} target="_blank" rel="noreferrer">{t("cert.credGet")} ↗</a>}</>;
+  };
 
   const doUpload = async () => {
     if (!up.domain.trim() || !up.certFile || !up.keyFile) return;
@@ -28,8 +50,10 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
       dnsProvider: form.provider,
       server: form.url,
       credentials: form.credentials,
+      eabKid: form.eabKid,
+      eabHmacKey: form.eabHmacKey,
     });
-    setForm(s => ({ ...s, domain: "", credentials: {} }));
+    setForm(s => ({ ...s, domain: "", credentials: {}, eabKid: "", eabHmacKey: "" }));
   };
 
   return (
@@ -67,12 +91,20 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
           </div>
           <div className="field-row">
             {(provider && provider.fields || []).map(field => (
-              <Field key={field.name} label={field.label}>
+              <Field key={field.name} label={field.label} hint={credHint(field.name)}>
                 <input className="input mono" type={field.type || "text"} placeholder={field.label}
                   value={form.credentials[field.name] || ""}
                   onChange={(e) => setF("credentials", { ...form.credentials, [field.name]: e.target.value })} />
               </Field>
             ))}
+          </div>
+          <div className="field-row">
+            <Field label={t("cert.eabKid")} hint={credHint("EAB_KID")}>
+              <input className="input mono" type="text" placeholder="EAB_KID" value={form.eabKid} onChange={(e) => setF("eabKid", e.target.value)} />
+            </Field>
+            <Field label={t("cert.eabHmacKey")} hint={credHint("EAB_HMAC_KEY")}>
+              <input className="input mono" type="password" placeholder="EAB_HMAC_KEY" value={form.eabHmacKey} onChange={(e) => setF("eabHmacKey", e.target.value)} />
+            </Field>
           </div>
           <button className="btn btn-primary" disabled={!form.domain.trim() || !form.provider} onClick={issue}><Icon name="shield" size={16} />{t("cert.issue")}</button>
 
