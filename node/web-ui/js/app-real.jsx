@@ -1,4 +1,4 @@
-/* global React, ReactDOM, tFor, Sidebar, DashboardPage, RulesPage, CertPage, UsersPage, SettingsPage, BackupPage, Icon */
+/* global React, ReactDOM, tFor, Sidebar, DashboardPage, ProxyPage, CertPage, SettingsPage, BackupPage, Icon */
 
 const { useCallback, useEffect, useMemo, useState } = React;
 
@@ -48,6 +48,7 @@ function splitTarget(value) {
 }
 
 function normalizeRule(rule, kind) {
+  const users = Object.entries(rule.users || {}).map(([username, hash]) => ({ username, hash, password: "" }));
   return {
     id: rule.id,
     enabled: !!rule.enabled,
@@ -57,6 +58,7 @@ function normalizeRule(rule, kind) {
     protocol: String(rule.protocol || (kind === "ws" ? "ws:" : "http:")).replace(":", "").toUpperCase(),
     pretend: !!rule.pretendMode,
     priority: Number(rule.priority || 1),
+    users,
   };
 }
 
@@ -72,6 +74,7 @@ function denormalizeRule(rule, kind) {
     protocol: protocol.endsWith(":") ? protocol : `${protocol}:`,
     pretendMode: !!rule.pretend,
     priority: Number(rule.priority || 1),
+    users: (rule.users || []).map(u => ({ username: u.username || "", password: u.password || "", hash: u.hash || "" })).filter(u => u.username),
   };
 }
 
@@ -93,14 +96,6 @@ function normalizeCert(cert) {
   };
 }
 
-function normalizeUser(user) {
-  return {
-    host: user.host || "",
-    username: user.username || "",
-    hash: user.passwordHash || user.hash || "",
-  };
-}
-
 function normalizeBackup(backup) {
   return {
     name: backup.name || backup.filename || "",
@@ -110,7 +105,10 @@ function normalizeBackup(backup) {
 }
 
 function App() {
-  const [route, setRoute] = useState(() => LS("pa.route", "dashboard"));
+  const [route, setRoute] = useState(() => {
+    const saved = LS("pa.route", "dashboard");
+    return ["http", "ws", "users"].includes(saved) ? "proxy" : saved;
+  });
   const [lang, setLang] = useState(() => LS("pa.lang", "zh"));
   const [theme, setTheme] = useState(() => LS("pa.theme", "light"));
   const [modal, setModal] = useState(null);
@@ -122,7 +120,6 @@ function App() {
   const [ws, setWs] = useState([]);
   const [certs, setCerts] = useState([]);
   const [acme, setAcme] = useState({ available: false, providers: [], defaultServer: "", certs: [] });
-  const [users, setUsers] = useState([]);
   const [settings, setSettings] = useState({ maxSessions: 0, defaultUser: "", defaultPass: "", enableAuth: false });
   const [backups, setBackups] = useState([]);
 
@@ -159,9 +156,6 @@ function App() {
     const acmeCerts = await api.get("/api/acme/certs");
     setAcme({ available: true, providers: info.providers || [], defaultServer: info.defaultServer || "", certs: acmeCerts.map(normalizeCert) });
   }, []);
-  const loadUsers = useCallback(async () => {
-    setUsers((await api.get("/api/users")).map(normalizeUser));
-  }, []);
   const loadSettings = useCallback(async () => {
     const data = await api.get("/api/settings");
     setSettings({
@@ -176,8 +170,8 @@ function App() {
   }, []);
 
   const reloadAll = useCallback(async () => {
-    await Promise.all([loadStatus(), loadHttp(), loadWs(), loadCerts(), loadAcme(), loadUsers(), loadSettings(), loadBackups()]);
-  }, [loadStatus, loadHttp, loadWs, loadCerts, loadAcme, loadUsers, loadSettings, loadBackups]);
+    await Promise.all([loadStatus(), loadHttp(), loadWs(), loadCerts(), loadAcme(), loadSettings(), loadBackups()]);
+  }, [loadStatus, loadHttp, loadWs, loadCerts, loadAcme, loadSettings, loadBackups]);
 
   useEffect(() => {
     (async () => {
@@ -226,6 +220,96 @@ function App() {
     }
   };
 
+  const proxyEntries = useMemo(() => {
+    const map = new Map();
+    const ensure = (rule) => {
+      const key = [rule.domain || "", rule.path || "/", rule.target || ""].join("\u0000");
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key,
+          enabled: !!rule.enabled,
+          domain: rule.domain || "",
+          path: rule.path || "/",
+          target: rule.target || "",
+          httpEnabled: false,
+          httpProtocol: "HTTPS",
+          wsEnabled: false,
+          wsProtocol: "WSS",
+          pretend: !!rule.pretend,
+          priority: Number(rule.priority || 1),
+          users: rule.users || [],
+          _seen: false,
+          _httpId: null,
+          _wsId: null,
+        });
+      }
+      return map.get(key);
+    };
+
+    http.forEach(rule => {
+      const entry = ensure(rule);
+      entry.httpEnabled = true;
+      entry.httpProtocol = rule.protocol || "HTTP";
+      entry.enabled = entry._seen ? entry.enabled || !!rule.enabled : !!rule.enabled;
+      entry._seen = true;
+      entry.pretend = !!rule.pretend;
+      entry.priority = Number(rule.priority || entry.priority || 1);
+      entry.users = rule.users || entry.users || [];
+      entry._httpId = rule.id;
+    });
+
+    ws.forEach(rule => {
+      const entry = ensure(rule);
+      entry.wsEnabled = true;
+      entry.wsProtocol = rule.protocol || "WS";
+      entry.enabled = entry._seen ? entry.enabled || !!rule.enabled : !!rule.enabled;
+      entry._seen = true;
+      entry.pretend = !!rule.pretend;
+      entry.priority = Number(rule.priority || entry.priority || 1);
+      if ((!entry.users || entry.users.length === 0) && rule.users) entry.users = rule.users;
+      entry._wsId = rule.id;
+    });
+
+    return Array.from(map.values()).map(({ _seen, ...entry }) => entry).sort((a, b) => a.priority - b.priority || a.domain.localeCompare(b.domain));
+  }, [http, ws]);
+
+  const saveProxyEntry = async (next, original) => {
+    const shared = {
+      enabled: !!next.enabled,
+      domain: next.domain || "",
+      path: next.path || "/",
+      target: next.target || "",
+      pretend: !!next.pretend,
+      priority: Number(next.priority || 1),
+      users: (next.users || []).filter(u => u.username && String(u.username).trim()),
+    };
+
+    const saveOne = async (kind, id, enabled, protocol) => {
+      const base = kind === "ws" ? "/api/ws-rules" : "/api/http-rules";
+      if (!enabled) {
+        if (id) await api.delete(`${base}/${id}`);
+        return;
+      }
+      const payload = denormalizeRule({ ...shared, protocol }, kind);
+      if (id) await api.put(`${base}/${id}`, payload);
+      else await api.post(base, payload);
+    };
+
+    await Promise.all([
+      saveOne("http", original && original._httpId, next.httpEnabled, next.httpProtocol || "HTTPS"),
+      saveOne("ws", original && original._wsId, next.wsEnabled, next.wsProtocol || "WSS"),
+    ]);
+    await Promise.all([loadHttp(), loadWs(), loadStatus()]);
+  };
+
+  const deleteProxyEntry = async (entry) => {
+    await Promise.all([
+      entry._httpId ? api.delete(`/api/http-rules/${entry._httpId}`) : Promise.resolve(),
+      entry._wsId ? api.delete(`/api/ws-rules/${entry._wsId}`) : Promise.resolve(),
+    ]);
+    await Promise.all([loadHttp(), loadWs(), loadStatus()]);
+  };
+
   const uploadCert = async ({ domain, certFile, keyFile }) => {
     const form = new FormData();
     form.append("domain", domain);
@@ -252,18 +336,6 @@ function App() {
     await api.post(`/api/acme/${encodeURIComponent(domain)}/renew`);
     await Promise.all([loadCerts(), loadAcme()]);
     toast(t("toast.saved"));
-  };
-
-  const addUser = async (data) => {
-    await api.post("/api/users", data);
-    await loadUsers();
-    toast(t("toast.added"));
-  };
-
-  const deleteUser = async (data) => {
-    await api.delete(`/api/users/${encodeURIComponent(data.host)}/${encodeURIComponent(data.username)}`);
-    await loadUsers();
-    toast(t("toast.deleted"));
   };
 
   const saveSettings = async (next) => {
@@ -305,12 +377,10 @@ function App() {
 
   const counts = useMemo(() => ({
     dashboard: 0,
-    http: http.length,
-    ws: ws.length,
+    proxy: proxyEntries.length,
     cert: certs.length,
-    users: users.length,
     backup: backups.length,
-  }), [http.length, ws.length, certs.length, users.length, backups.length]);
+  }), [proxyEntries.length, certs.length, backups.length]);
 
   const go = (r) => { setModal(null); setRoute(r); };
   const openOn = (r) => { setRoute(r); setModal(r); };
@@ -322,12 +392,11 @@ function App() {
       <Sidebar route={route} setRoute={go} t={t} lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} counts={counts} user={user} onLogout={logout} />
       <main className="main">
         {route === "dashboard" && <DashboardPage t={t} lang={lang} http={http} ws={ws} certs={certs} status={status} go={go}
-          openHttp={() => openOn("http")} openWs={() => openOn("ws")} openCert={() => openOn("cert")} createBackup={createBackup} />}
-        {route === "http" && <RulesPage t={t} kind="http" rules={http} setRules={withSaveRules("http")} modalOpen={mOpen("http")} setModalOpen={setMOpen("http")} toast={toast} />}
-        {route === "ws" && <RulesPage t={t} kind="ws" rules={ws} setRules={withSaveRules("ws")} modalOpen={mOpen("ws")} setModalOpen={setMOpen("ws")} toast={toast} />}
+          openProxy={() => openOn("proxy")} openCert={() => openOn("cert")} createBackup={createBackup} />}
+        {route === "proxy" && <ProxyPage t={t} entries={proxyEntries} modalOpen={mOpen("proxy")} setModalOpen={setMOpen("proxy")}
+          save={saveProxyEntry} remove={deleteProxyEntry} toast={toast} />}
         {route === "cert" && <CertPage t={t} lang={lang} certs={certs} acme={acme} modalOpen={mOpen("cert")} setModalOpen={setMOpen("cert")}
           uploadCert={uploadCert} deleteCert={deleteCert} issueAcme={issueAcme} renewAcme={renewAcme} toast={toast} />}
-        {route === "users" && <UsersPage t={t} users={users} modalOpen={mOpen("users")} setModalOpen={setMOpen("users")} addUser={addUser} deleteUser={deleteUser} toast={toast} />}
         {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} toast={toast} />}
         {route === "backup" && <BackupPage t={t} lang={lang} backups={backups} createBackup={createBackup} restoreBackup={restoreBackup} deleteBackup={deleteBackup} toast={toast} />}
       </main>

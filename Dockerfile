@@ -39,7 +39,6 @@ ENV username="land007" \
 ADD node/start.sh /node_/
 ADD node/cert /node_/cert
 RUN sed -i 's/\r//' /node_/start.sh
-ADD node/users_list.json /node_/users_list.json
 ADD node/admin_users.json /node_/admin_users.json
 ADD proxy-config.json /node_/proxy-config.json
 

@@ -45,17 +45,15 @@ On first startup, if `proxy-config.json` doesn't exist, the system will automati
 
 - **proxy-config.json** - Main proxy configuration
 - **admin_users.json** - Admin account credentials (bcrypt hashed)
-- **users_list.json** - Proxy user credentials (MD5 hashed)
+- Proxy client auth accounts are stored on each HTTP/WebSocket rule in `proxy-config.json` as MD5 password hashes.
 
 ### Web Interface Sections
 
 1. **Dashboard** - Overview of system status and statistics
-2. **HTTP Rules** - Manage HTTP/HTTPS proxy rules
-3. **WebSocket Rules** - Manage WebSocket proxy rules
-4. **Certificates** - Upload and manage SSL certificates
-5. **Users** - Manage proxy user authentication
-6. **Settings** - Configure max sessions and default authentication
-7. **Backups** - Create, restore, and manage configuration backups
+2. **Proxy** - Manage HTTP/HTTPS, WS/WSS, upstream targets, and proxy client auth accounts together
+3. **Certificates** - Upload and manage SSL certificates
+4. **Settings** - Configure max sessions and default authentication
+5. **Backups** - Create, restore, and manage configuration backups
 
 ## API Endpoints
 
@@ -84,11 +82,6 @@ On first startup, if `proxy-config.json` doesn't exist, the system will automati
 - `GET /api/certificates` - List all certificates
 - `POST /api/certificates` - Upload certificate
 - `DELETE /api/certificates/:domain` - Delete certificate
-
-### Users
-- `GET /api/users` - List all proxy users
-- `POST /api/users` - Create new proxy user
-- `DELETE /api/users/:host/:username` - Delete proxy user
 
 ### Admin Users
 - `GET /api/admin/users` - List all admin users
@@ -140,7 +133,7 @@ The following features from the original `proxy.js` are fully preserved:
 
 - ✅ Session Management with node-session
 - ✅ User Session Tracking with max session limits
-- ✅ users_list.json Integration for dynamic user authentication
+- ✅ Rule-level proxy client authentication
 - ✅ MD5 Password Hashing for proxy user compatibility
 - ✅ Session Token Management
 - ✅ HTTP Proxying with pretend mode
@@ -153,7 +146,6 @@ The following features from the original `proxy.js` are fully preserved:
 The following volumes are mounted for persistence:
 
 - `./cert:/node_/cert` - SSL certificate files
-- `./users_list.json:/node_/users_list.json` - Proxy user credentials
 - `./backups:/node_/backups` - Configuration backups
 - `./proxy-config.json:/node_/proxy-config.json` - Main configuration
 - `./admin_users.json:/node_/admin_users.json` - Admin credentials
@@ -181,7 +173,7 @@ Existing deployments using environment variables will be automatically migrated 
 
 1. System reads environment variables
 2. Creates `proxy-config.json` with equivalent configuration
-3. Logs migration warning
+3. Writes `.env-imported` so the import is not repeated
 4. Continues using JSON config thereafter
 
 ## Development
@@ -190,8 +182,10 @@ To modify the web UI, edit files in `node/web-ui/`:
 
 - `index.html` - Main dashboard
 - `login.html` - Admin login page
-- `css/custom.css` - Custom styles
-- `js/app.js` - Application logic
+- `css/tokens.css` and `css/app-design.css` - Admin UI styles
+- `js/app-real.jsx` - Application state and routing
+- `js/pages-rules.jsx` - Unified proxy management page
+- `js/pages-config.jsx` - Certificate, settings, and backup pages
 
 ## License
 

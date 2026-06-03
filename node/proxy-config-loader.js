@@ -10,6 +10,7 @@ const configValidator = require('./config-validator');
 
 const CONFIG_PATH = path.join(__dirname, 'proxy-config.json');
 const BACKUP_DIR = path.join(__dirname, 'backups');
+const IMPORTED_MARKER = path.join(__dirname, '.env-imported');
 const RELOAD_DEBOUNCE_MS = 500;
 
 class ProxyConfigLoader {
@@ -37,6 +38,8 @@ class ProxyConfigLoader {
 
 		// Load initial configuration
 		await this.loadConfiguration();
+
+		await this.importFromEnvOnce();
 
 		// Start watching for changes
 		this.startWatching();
@@ -202,7 +205,8 @@ class ProxyConfigLoader {
 				paths: [],
 				hosts: [],
 				ports: [],
-				pretends: []
+				pretends: [],
+				users: []
 			};
 		}
 
@@ -216,7 +220,8 @@ class ProxyConfigLoader {
 			paths: rules.map(r => r.path),
 			hosts: rules.map(r => r.targetHost),
 			ports: rules.map(r => r.targetPort.toString()),
-			pretends: rules.map(r => r.pretendMode.toString())
+			pretends: rules.map(r => r.pretendMode.toString()),
+			users: rules.map(r => r.users || {})
 		};
 	}
 
@@ -232,7 +237,8 @@ class ProxyConfigLoader {
 				paths: [],
 				hosts: [],
 				ports: [],
-				pretends: []
+				pretends: [],
+				users: []
 			};
 		}
 
@@ -246,7 +252,8 @@ class ProxyConfigLoader {
 			paths: rules.map(r => r.path),
 			hosts: rules.map(r => r.targetHost),
 			ports: rules.map(r => r.targetPort.toString()),
-			pretends: rules.map(r => r.pretendMode.toString())
+			pretends: rules.map(r => r.pretendMode.toString()),
+			users: rules.map(r => r.users || {})
 		};
 	}
 
@@ -281,6 +288,96 @@ class ProxyConfigLoader {
 		return this.config.sslCertificates;
 	}
 
+	parseEnvList(name) {
+		if (!process.env[name]) {
+			return [];
+		}
+		return process.env[name]
+			.replace(/\\/g, '')
+			.split(',')
+			.map(s => s.trim());
+	}
+
+	buildRulesFromEnv() {
+		const http_proxy_protocols = this.parseEnvList('http_proxy_protocols');
+		const http_proxy_domains = this.parseEnvList('http_proxy_domains');
+		const http_proxy_paths = this.parseEnvList('http_proxy_paths');
+		const http_proxy_hosts = this.parseEnvList('http_proxy_hosts');
+		const http_proxy_ports = this.parseEnvList('http_proxy_ports');
+		const http_proxy_pretends = this.parseEnvList('http_proxy_pretends');
+
+		const ws_proxy_protocols = this.parseEnvList('ws_proxy_protocols');
+		const ws_proxy_domains = this.parseEnvList('ws_proxy_domains');
+		const ws_proxy_paths = this.parseEnvList('ws_proxy_paths');
+		const ws_proxy_hosts = this.parseEnvList('ws_proxy_hosts');
+		const ws_proxy_ports = this.parseEnvList('ws_proxy_ports');
+		const ws_proxy_pretends = this.parseEnvList('ws_proxy_pretends');
+
+		const now = Date.now();
+		const httpProxyRules = [];
+		const wsProxyRules = [];
+
+		for (let i = 0; i < http_proxy_paths.length; i++) {
+			if (http_proxy_paths[i]) {
+				httpProxyRules.push({
+					id: `http-rule-${now}-${i}`,
+					enabled: true,
+					protocol: http_proxy_protocols[i] || 'http:',
+					domain: http_proxy_domains[i] || '',
+					path: http_proxy_paths[i],
+					targetHost: http_proxy_hosts[i] || 'localhost',
+					targetPort: parseInt(http_proxy_ports[i]) || 80,
+					pretendMode: http_proxy_pretends[i] === 'true',
+					priority: i + 1,
+					users: {}
+				});
+			}
+		}
+
+		for (let i = 0; i < ws_proxy_paths.length; i++) {
+			if (ws_proxy_paths[i]) {
+				wsProxyRules.push({
+					id: `ws-rule-${now}-${i}`,
+					enabled: true,
+					protocol: ws_proxy_protocols[i] || 'ws:',
+					domain: ws_proxy_domains[i] || '',
+					path: ws_proxy_paths[i],
+					targetHost: ws_proxy_hosts[i] || 'localhost',
+					targetPort: parseInt(ws_proxy_ports[i]) || 80,
+					pretendMode: ws_proxy_pretends[i] === 'true',
+					priority: i + 1,
+					users: {}
+				});
+			}
+		}
+
+		return { httpProxyRules, wsProxyRules };
+	}
+
+	async importFromEnvOnce() {
+		if (fs.existsSync(IMPORTED_MARKER)) {
+			return;
+		}
+
+		try {
+			const empty = !(this.config.httpProxyRules && this.config.httpProxyRules.length) &&
+				!(this.config.wsProxyRules && this.config.wsProxyRules.length);
+			if (empty) {
+				const { httpProxyRules, wsProxyRules } = this.buildRulesFromEnv();
+				if (httpProxyRules.length || wsProxyRules.length) {
+					this.config.httpProxyRules = httpProxyRules;
+					this.config.wsProxyRules = wsProxyRules;
+					await this.saveConfiguration(this.config, false);
+					console.log('✅ Imported proxy rules from environment variables');
+				}
+			}
+			fs.writeFileSync(IMPORTED_MARKER, new Date().toISOString(), 'utf-8');
+		} catch (error) {
+			console.error('⛔ Error during one-time environment import:', error);
+			throw error;
+		}
+	}
+
 	/**
 	 * Migrate configuration from environment variables to JSON file
 	 */
@@ -293,19 +390,7 @@ class ProxyConfigLoader {
 		const max_session = parseInt(process.env.max_session || '0');
 		const domainName = process.env.DOMAIN_NAME || 'voice.qhkly.com';
 
-		const http_proxy_protocols = (process.env.http_proxy_protocols || '').split(',');
-		const http_proxy_domains = (process.env.http_proxy_domains || '').split(',');
-		const http_proxy_paths = (process.env.http_proxy_paths || '').split(',');
-		const http_proxy_hosts = (process.env.http_proxy_hosts || '').split(',');
-		const http_proxy_ports = (process.env.http_proxy_ports || '').split(',');
-		const http_proxy_pretends = (process.env.http_proxy_pretends || '').split(',');
-
-		const ws_proxy_protocols = (process.env.ws_proxy_protocols || '').split(',');
-		const ws_proxy_domains = (process.env.ws_proxy_domains || '').split(',');
-		const ws_proxy_paths = (process.env.ws_proxy_paths || '').split(',');
-		const ws_proxy_hosts = (process.env.ws_proxy_hosts || '').split(',');
-		const ws_proxy_ports = (process.env.ws_proxy_ports || '').split(',');
-		const ws_proxy_pretends = (process.env.ws_proxy_pretends || '').split(',');
+		const { httpProxyRules, wsProxyRules } = this.buildRulesFromEnv();
 
 		// Build configuration object
 		const config = {
@@ -319,44 +404,10 @@ class ProxyConfigLoader {
 					password: password
 				}
 			},
-			httpProxyRules: [],
-			wsProxyRules: [],
+			httpProxyRules,
+			wsProxyRules,
 			sslCertificates: []
 		};
-
-		// Convert HTTP proxy rules
-		for (let i = 0; i < http_proxy_paths.length; i++) {
-			if (http_proxy_paths[i]) {
-				config.httpProxyRules.push({
-					id: `http-rule-${Date.now()}-${i}`,
-					enabled: true,
-					protocol: http_proxy_protocols[i] || 'http:',
-					domain: http_proxy_domains[i] || '',
-					path: http_proxy_paths[i],
-					targetHost: http_proxy_hosts[i] || 'localhost',
-					targetPort: parseInt(http_proxy_ports[i]) || 80,
-					pretendMode: http_proxy_pretends[i] === 'true',
-					priority: i + 1
-				});
-			}
-		}
-
-		// Convert WebSocket proxy rules
-		for (let i = 0; i < ws_proxy_paths.length; i++) {
-			if (ws_proxy_paths[i]) {
-				config.wsProxyRules.push({
-					id: `ws-rule-${Date.now()}-${i}`,
-					enabled: true,
-					protocol: ws_proxy_protocols[i] || 'ws:',
-					domain: ws_proxy_domains[i] || '',
-					path: ws_proxy_paths[i],
-					targetHost: ws_proxy_hosts[i] || 'localhost',
-					targetPort: parseInt(ws_proxy_ports[i]) || 80,
-					pretendMode: ws_proxy_pretends[i] === 'true',
-					priority: i + 1
-				});
-			}
-		}
 
 		// Add SSL certificates for detected domains
 		const certDir = path.join(__dirname, 'cert');

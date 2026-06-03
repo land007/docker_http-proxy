@@ -77,6 +77,40 @@ const handleValidationErrors = (req, res, next) => {
 	next();
 };
 
+const hashPassword = (password) => {
+	const md5 = crypto.createHash('md5');
+	md5.update(password === undefined ? 'undefined' : String(password));
+	return md5.digest('hex');
+};
+
+const normalizeRuleUsers = (inputUsers, existingUsers = {}) => {
+	if (!Array.isArray(inputUsers)) {
+		return existingUsers || {};
+	}
+
+	const result = {};
+	inputUsers.forEach(user => {
+		if (!user || !user.username) {
+			return;
+		}
+
+		const username = String(user.username).trim();
+		if (!username) {
+			return;
+		}
+
+		if (user.password) {
+			result[username] = hashPassword(user.password);
+		} else if (existingUsers && existingUsers[username]) {
+			result[username] = existingUsers[username];
+		} else if (user.hash) {
+			result[username] = user.hash;
+		}
+	});
+
+	return result;
+};
+
 // ============= Auth Routes =============
 
 /**
@@ -261,7 +295,8 @@ app.post('/api/http-rules', requireAuth, [
 	body('targetHost').isString().notEmpty(),
 	body('targetPort').isInt({ min: 1, max: 65535 }),
 	body('pretendMode').isBoolean(),
-	body('priority').isInt({ min: 1 })
+	body('priority').isInt({ min: 1 }),
+	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {
 	try {
 		const config = configLoader.getConfig();
@@ -271,7 +306,8 @@ app.post('/api/http-rules', requireAuth, [
 
 		const newRule = {
 			id: `http-rule-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
-			...req.body
+			...req.body,
+			users: normalizeRuleUsers(req.body.users, {})
 		};
 
 		config.httpProxyRules.push(newRule);
@@ -297,7 +333,8 @@ app.put('/api/http-rules/:id', requireAuth, [
 	body('targetHost').optional().isString(),
 	body('targetPort').optional().isInt({ min: 1, max: 65535 }),
 	body('pretendMode').optional().isBoolean(),
-	body('priority').optional().isInt({ min: 1 })
+	body('priority').optional().isInt({ min: 1 }),
+	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {
 	try {
 		const config = configLoader.getConfig();
@@ -307,9 +344,11 @@ app.put('/api/http-rules/:id', requireAuth, [
 			return res.status(404).json({ error: 'Rule not found' });
 		}
 
+		const existingRule = config.httpProxyRules[ruleIndex];
 		config.httpProxyRules[ruleIndex] = {
-			...config.httpProxyRules[ruleIndex],
+			...existingRule,
 			...req.body,
+			users: normalizeRuleUsers(req.body.users, existingRule.users || {}),
 			id: req.params.id // Preserve ID
 		};
 
@@ -374,7 +413,8 @@ app.post('/api/ws-rules', requireAuth, [
 	body('targetHost').isString().notEmpty(),
 	body('targetPort').isInt({ min: 1, max: 65535 }),
 	body('pretendMode').isBoolean(),
-	body('priority').isInt({ min: 1 })
+	body('priority').isInt({ min: 1 }),
+	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {
 	try {
 		const config = configLoader.getConfig();
@@ -384,7 +424,8 @@ app.post('/api/ws-rules', requireAuth, [
 
 		const newRule = {
 			id: `ws-rule-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
-			...req.body
+			...req.body,
+			users: normalizeRuleUsers(req.body.users, {})
 		};
 
 		config.wsProxyRules.push(newRule);
@@ -410,7 +451,8 @@ app.put('/api/ws-rules/:id', requireAuth, [
 	body('targetHost').optional().isString(),
 	body('targetPort').optional().isInt({ min: 1, max: 65535 }),
 	body('pretendMode').optional().isBoolean(),
-	body('priority').optional().isInt({ min: 1 })
+	body('priority').optional().isInt({ min: 1 }),
+	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {
 	try {
 		const config = configLoader.getConfig();
@@ -420,9 +462,11 @@ app.put('/api/ws-rules/:id', requireAuth, [
 			return res.status(404).json({ error: 'Rule not found' });
 		}
 
+		const existingRule = config.wsProxyRules[ruleIndex];
 		config.wsProxyRules[ruleIndex] = {
-			...config.wsProxyRules[ruleIndex],
+			...existingRule,
 			...req.body,
+			users: normalizeRuleUsers(req.body.users, existingRule.users || {}),
 			id: req.params.id // Preserve ID
 		};
 
@@ -680,44 +724,6 @@ app.delete('/api/backups/:name', requireAuth, [
 	}
 });
 
-// ============= User Management Routes =============
-
-/**
- * GET /api/users
- * Get all proxy users (from users_list.json)
- */
-app.get('/api/users', requireAuth, (req, res) => {
-	try {
-		const usersPath = path.join(__dirname, 'users_list.json');
-
-		if (!fs.existsSync(usersPath)) {
-			return res.json([]);
-		}
-
-		const data = fs.readFileSync(usersPath, 'utf-8');
-		const usersList = JSON.parse(data);
-
-		// Convert to array format
-		const result = [];
-		Object.entries(usersList).forEach(([host, creds]) => {
-			if (creds && typeof creds === 'object' && !Array.isArray(creds)) {
-				Object.entries(creds).forEach(([username, passwordHash]) => {
-					result.push({
-						host,
-						username,
-						passwordHash
-					});
-				});
-			}
-		});
-
-		res.json(result);
-	} catch (error) {
-		console.error('Error getting users:', error);
-		res.status(500).json({ error: 'Failed to get users' });
-	}
-});
-
 // ============= ACME Routes =============
 
 /**
@@ -787,100 +793,6 @@ app.post('/api/acme/:domain/renew', requireAuth, [
 		});
 	} catch (error) {
 		console.error('Error renewing ACME certificate:', error);
-		res.status(500).json({ error: error.message });
-	}
-});
-
-/**
- * POST /api/users
- * Create new proxy user
- */
-app.post('/api/users', requireAuth, [
-	body('host').isString().notEmpty(),
-	body('username').isString().notEmpty(),
-	body('password').isString().notEmpty().isLength({ min: 1 })
-], handleValidationErrors, async (req, res) => {
-	try {
-		const { host, username, password } = req.body;
-
-		// Hash password with MD5 (for compatibility with existing proxy)
-		const md5 = crypto.createHash('md5');
-		md5.update(password);
-		const passwordHash = md5.digest('hex');
-
-		// Read users_list.json
-		const usersPath = path.join(__dirname, 'users_list.json');
-		let usersList = {};
-
-		if (fs.existsSync(usersPath)) {
-			const data = fs.readFileSync(usersPath, 'utf-8');
-			usersList = JSON.parse(data);
-		}
-
-		// Add user
-		if (!usersList[host]) {
-			usersList[host] = {};
-		}
-
-		usersList[host][username] = passwordHash;
-
-		// Save
-		fs.writeFileSync(usersPath, JSON.stringify(usersList, null, 2), 'utf-8');
-
-		res.status(201).json({
-			message: 'User created successfully',
-			user: {
-				host,
-				username,
-				passwordHash
-			}
-		});
-	} catch (error) {
-		console.error('Error creating user:', error);
-		res.status(500).json({ error: error.message });
-	}
-});
-
-/**
- * DELETE /api/users/:host/:username
- * Delete proxy user
- */
-app.delete('/api/users/:host/:username', requireAuth, [
-	param('host').isString(),
-	param('username').isString()
-], handleValidationErrors, async (req, res) => {
-	try {
-		const { host, username } = req.params;
-
-		// Read users_list.json
-		const usersPath = path.join(__dirname, 'users_list.json');
-
-		if (!fs.existsSync(usersPath)) {
-			return res.status(404).json({ error: 'Users file not found' });
-		}
-
-		const data = fs.readFileSync(usersPath, 'utf-8');
-		const usersList = JSON.parse(data);
-
-		// Check if user exists
-		if (!usersList[host] || !usersList[host][username]) {
-			return res.status(404).json({ error: 'User not found' });
-		}
-
-		// Delete user
-		delete usersList[host][username];
-
-		// Clean up empty host objects
-		if (Object.keys(usersList[host]).length === 0) {
-			delete usersList[host];
-		}
-
-		// Save
-		fs.writeFileSync(usersPath, JSON.stringify(usersList, null, 2), 'utf-8');
-
-		res.json({ message: 'User deleted successfully' });
-	} catch (error) {
-		console.error('Error deleting user:', error);
 		res.status(500).json({ error: error.message });
 	}
 });

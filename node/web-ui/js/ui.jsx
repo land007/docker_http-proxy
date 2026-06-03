@@ -134,8 +134,7 @@ function PageHead({ eyebrow, title, sub, actions }) {
 
 /* ---------- sidebar ---------- */
 const NAV_ITEMS = [
-  ["dashboard", "dashboard"], ["http", "http"], ["ws", "ws"],
-  ["cert", "cert"], ["users", "users"], ["settings", "settings"], ["backup", "backup"],
+  ["dashboard", "dashboard"], ["proxy", "http"], ["cert", "cert"], ["settings", "settings"], ["backup", "backup"],
 ];
 
 function Sidebar({ route, setRoute, t, lang, setLang, theme, setTheme, counts, user, onLogout }) {

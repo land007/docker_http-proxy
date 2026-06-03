@@ -37,7 +37,8 @@ const CONFIG_SCHEMA = {
 			targetHost: { type: 'string', required: true, minLength: 1 },
 			targetPort: { type: 'number', required: true, min: 1, max: 65535 },
 			pretendMode: { type: 'boolean', required: true },
-			priority: { type: 'number', required: true, min: 1 }
+			priority: { type: 'number', required: true, min: 1 },
+			users: { type: 'object', required: false }
 		}
 	},
 	wsProxyRules: {
@@ -52,7 +53,8 @@ const CONFIG_SCHEMA = {
 			targetHost: { type: 'string', required: true, minLength: 1 },
 			targetPort: { type: 'number', required: true, min: 1, max: 65535 },
 			pretendMode: { type: 'boolean', required: true },
-			priority: { type: 'number', required: true, min: 1 }
+			priority: { type: 'number', required: true, min: 1 },
+			users: { type: 'object', required: false }
 		}
 	},
 	sslCertificates: {
@@ -222,6 +224,8 @@ class ConfigValidator {
 			if (!rule.priority || typeof rule.priority !== 'number' || rule.priority < 1) {
 				errors.push(`httpProxyRules[${index}].priority must be a number greater than 0`);
 			}
+
+			errors.push(...this.validateRuleUsers(rule.users, `httpProxyRules[${index}].users`));
 		});
 
 		return errors;
@@ -280,6 +284,8 @@ class ConfigValidator {
 			if (!rule.priority || typeof rule.priority !== 'number' || rule.priority < 1) {
 				errors.push(`wsProxyRules[${index}].priority must be a number greater than 0`);
 			}
+
+			errors.push(...this.validateRuleUsers(rule.users, `wsProxyRules[${index}].users`));
 		});
 
 		return errors;
@@ -394,6 +400,8 @@ class ConfigValidator {
 			errors.push('priority must be a number greater than 0');
 		}
 
+		errors.push(...this.validateRuleUsers(rule.users, 'users'));
+
 		return {
 			valid: errors.length === 0,
 			errors
@@ -442,10 +450,32 @@ class ConfigValidator {
 			errors.push('priority must be a number greater than 0');
 		}
 
+		errors.push(...this.validateRuleUsers(rule.users, 'users'));
+
 		return {
 			valid: errors.length === 0,
 			errors
 		};
+	}
+
+	validateRuleUsers(users, fieldName) {
+		const errors = [];
+		if (users === undefined) {
+			return errors;
+		}
+		if (!users || typeof users !== 'object' || Array.isArray(users)) {
+			errors.push(`${fieldName} must be an object`);
+			return errors;
+		}
+		Object.entries(users).forEach(([username, hash]) => {
+			if (!username) {
+				errors.push(`${fieldName} usernames must be non-empty strings`);
+			}
+			if (typeof hash !== 'string') {
+				errors.push(`${fieldName}.${username} must be a string`);
+			}
+		});
+		return errors;
 	}
 }
 

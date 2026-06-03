@@ -10,8 +10,6 @@ const path = require('path');
 const sep = path.sep;
 const net = require('net');
 const NodeSession = require('node-session');
-const util = require('util');
-const readFile = util.promisify(fs.readFile);
 const configLoader = require('./proxy-config-loader');
 const proxyStats = require('./proxy-stats');
 
@@ -22,23 +20,9 @@ var nodeSession = new NodeSession({
 	'encrypt': true
 });
 
-var readJson = async function(filename) {
-	try {
-		let data = await readFile(filename, 'utf-8'); //put the resolved results of readFilePr into contents
-		let json = JSON.parse(data.toString());
-		//consoleLog(json);
-		return json;
-	} catch (err) { //if readFilePr returns errors, we catch it here
-		console.error('⛔ We could not read', filename)
-		console.error('⛔ This is the error: ', err);
-	}
-};
-
 // Load configuration from config loader (supports hot-reload)
 var username = process.env['username'] || 'land007';
 var password = process.env['password'] || '';
-var usernames = [];
-var passwords = [];
 var max_session = 0;
 var http_proxy_protocols = [];
 var http_proxy_domains = [];
@@ -46,6 +30,7 @@ var http_proxy_paths = [];
 var http_proxy_hosts = [];
 var http_proxy_ports = [];
 var http_proxy_pretends = [];
+var http_proxy_users = [];
 
 var ws_proxy_protocols = [];
 var ws_proxy_domains = [];
@@ -53,6 +38,7 @@ var ws_proxy_paths = [];
 var ws_proxy_hosts = [];
 var ws_proxy_ports = [];
 var ws_proxy_pretends = [];
+var ws_proxy_users = [];
 
 var domainName = process.env['DOMAIN_NAME'] || "voice.qhkly.com"; // e.g., "westus"
 
@@ -72,6 +58,9 @@ function updateConfiguration() {
 		if (config.settings.defaultAuth && config.settings.defaultAuth.enabled) {
 			username = config.settings.defaultAuth.username;
 			password = config.settings.defaultAuth.password;
+		} else if (config.settings.defaultAuth) {
+			username = '';
+			password = '';
 		}
 	}
 
@@ -83,6 +72,7 @@ function updateConfiguration() {
 	http_proxy_hosts = httpConfig.hosts;
 	http_proxy_ports = httpConfig.ports;
 	http_proxy_pretends = httpConfig.pretends;
+	http_proxy_users = httpConfig.users;
 
 	// Update WebSocket proxy rules
 	const wsConfig = configLoader.getWsProxyArrays();
@@ -92,6 +82,7 @@ function updateConfiguration() {
 	ws_proxy_hosts = wsConfig.hosts;
 	ws_proxy_ports = wsConfig.ports;
 	ws_proxy_pretends = wsConfig.pretends;
+	ws_proxy_users = wsConfig.users;
 
 	console.log('🔄 Configuration updated from config loader');
 }
@@ -295,14 +286,7 @@ const installResponseByteCounter = function(res, sample) {
 
 const _userSession = {};
 
-var users_list;
-const init = async function() {
-	users_list = await readJson(path.join(__dirname, 'users_list.json'));
-};
-init();
-setInterval(init, 5000);
-
-const check = function(req, h, _token) {
+const check = function(req, users, _token) {
 	// 检查session
 	let login_name;
 	if (max_session > 0 && _token) {
@@ -311,27 +295,11 @@ const check = function(req, h, _token) {
 	}
 	// 没有登录
 	if (login_name === undefined) {
-		let users;
-		if (users_list !== undefined) {
-			// 得到用户名密码对应表
-			users = users_list[h];
-		}
-		// 可以使用用户名密码参数
-		if (users === undefined) {
-			// 传参也支持多用户名密码形式
-			let _usernames = (usernames[h] ? usernames[h] : username).split('|');
-			let _passwords = (passwords[h] ? passwords[h] : password).split('|');
-			consoleLog('_usernames', _usernames);
-			consoleLog('_passwords', _passwords);
-			// 支持没有密码
-			if (!(_passwords.length == 1 && _passwords[0] == '')) {
+		if (!users || Object.keys(users).length === 0) {
+			users = undefined;
+			if (username && password) {
 				users = {};
-				for (let _p in _passwords) {
-					let _username = _usernames[_p];
-					let _password = _passwords[_p];
-					// 统一成用户名密码对象表
-					users[_username] = _password;
-				}
+				users[username] = password;
 			}
 		}
 		// 如果需要验证
@@ -418,7 +386,7 @@ const _requestListener = async function(req, res) {
 			res.once('finish', finishStats);
 			res.once('close', finishStats);
 			// 检查登录信息
-			if(!check(req, h, _token)) {
+			if(!check(req, http_proxy_users[h], _token)) {
 				send401(res);
 				return;
 			}
@@ -539,13 +507,14 @@ const _upgrade = function(req, socket, head) {
 	}
 	let have_ws_proxy_path = false;
 	for (let w in ws_proxy_paths) {
-		// 检查登录信息
-		if(!check(req, w, _token)) {
-			//send401(res);
-			return;
-		}
 		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
 			have_ws_proxy_path = true;
+			// 检查登录信息
+			if(!check(req, ws_proxy_users[w], _token)) {
+				socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=Authorization Required\r\n\r\n');
+				socket.destroy();
+				return;
+			}
 			const statsSample = proxyStats.openWs(buildRuleStatsMeta('ws', w));
 			let statsClosed = false;
 			const closeStats = (hadError) => {

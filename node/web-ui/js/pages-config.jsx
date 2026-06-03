@@ -1,5 +1,5 @@
 /* global React, Icon, Dot, Badge, Toggle, Field, Modal, Empty, PageHead */
-// pages-config.jsx — Certificates, Users, Settings, Backups. Exposes to window.
+// pages-config.jsx — Certificates, Settings, Backups. Exposes to window.
 
 const { useState: useStateC } = React;
 
@@ -103,52 +103,6 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
   );
 }
 
-/* ===================== USERS ===================== */
-function md5ish(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return (h.toString(16) + "c853d27731e22fd24202d2c3").slice(0, 32); }
-
-function UsersPage({ t, users, modalOpen, setModalOpen, addUser, deleteUser, toast }) {
-  const [f, setF] = useStateC({ host: "", username: "", password: "" });
-  const [confirm, setConfirm] = useStateC(null);
-  const add = async () => {
-    if (!f.host.trim() || !f.username.trim()) return;
-    await addUser({ host: f.host, username: f.username, password: f.password });
-    setF({ host: "", username: "", password: "" }); setModalOpen(false);
-  };
-  return (
-    <div>
-      <PageHead eyebrow={t("users.eyebrow")} title={t("users.title")} sub={t("users.sub")}
-        actions={<button className="btn btn-primary" onClick={() => setModalOpen(true)}><Icon name="plus" size={16} />{t("users.addUser")}</button>} />
-      <div className="card">
-        {users.length === 0
-          ? <Empty icon="users" title={t("users.empty")} sub={t("users.emptySub")}
-              action={<button className="btn btn-primary" onClick={() => setModalOpen(true)}><Icon name="plus" size={16} />{t("users.addUser")}</button>} />
-          : <div className="tablewrap"><table className="table">
-            <thead><tr><th>{t("users.host")}</th><th>{t("users.username")}</th><th>{t("users.passwordHash")}</th><th className="td-right">{t("common.actions")}</th></tr></thead>
-            <tbody>{users.map((u, i) => <tr key={i}>
-              <td className="mono cell-host">{u.host}</td>
-              <td className="mono">{u.username}</td>
-              <td className="mono cell-dim">{u.hash}</td>
-              <td><div className="cell-actions"><button className="btn btn-soft btn-icon" onClick={() => setConfirm(i)} title={t("common.delete")}><Icon name="trash" size={16} /></button></div></td>
-            </tr>)}</tbody>
-          </table></div>}
-      </div>
-
-      {modalOpen && <Modal t={t} onClose={() => setModalOpen(false)} title={t("users.newUser")}
-        foot={<><button className="btn btn-soft" onClick={() => setModalOpen(false)}>{t("common.cancel")}</button>
-          <button className="btn btn-primary" disabled={!f.host.trim() || !f.username.trim()} onClick={add}>{t("common.add")}</button></>}>
-        <Field label={t("users.host")} req><input className="input mono" placeholder="docx.qhkly.com" value={f.host} onChange={(e) => setF(s => ({ ...s, host: e.target.value }))} autoFocus /></Field>
-        <Field label={t("users.username")} req><input className="input mono" placeholder="land007" value={f.username} onChange={(e) => setF(s => ({ ...s, username: e.target.value }))} /></Field>
-        <Field label={t("users.password")} hint="MD5"><input className="input mono" type="password" placeholder="••••••••" value={f.password} onChange={(e) => setF(s => ({ ...s, password: e.target.value }))} /></Field>
-      </Modal>}
-      {confirm != null && <Modal sm t={t} onClose={() => setConfirm(null)} title={t("common.delete") + " · " + users[confirm].username}
-        foot={<><button className="btn btn-soft" onClick={() => setConfirm(null)}>{t("common.cancel")}</button>
-          <button className="btn btn-danger" onClick={async () => { await deleteUser(users[confirm]); setConfirm(null); }}><Icon name="trash" size={15} />{t("common.delete")}</button></>}>
-        <div className="mono" style={{ padding: "4px 0 8px", color: "var(--text-2)" }}>{users[confirm].username} <span className="muted">@ {users[confirm].host}</span></div>
-      </Modal>}
-    </div>
-  );
-}
-
 /* ===================== SETTINGS ===================== */
 function SettingsPage({ t, settings, saveSettings, toast }) {
   const [f, setF] = useStateC(settings);
@@ -221,4 +175,4 @@ function BackupPage({ t, lang, backups, createBackup, restoreBackup, deleteBacku
   );
 }
 
-Object.assign(window, { CertPage, UsersPage, SettingsPage, BackupPage });
+Object.assign(window, { CertPage, SettingsPage, BackupPage });

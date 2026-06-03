@@ -44,7 +44,7 @@ function ruleSortScore(rule, stats) {
 }
 
 /* ===================== DASHBOARD (editorial) ===================== */
-function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs, openCert, createBackup }) {
+function DashboardPage({ t, lang, http, ws, certs, status, go, openProxy, openCert, createBackup }) {
   const stats = status && status.proxyStats || {};
   const unmatchedStats = stats.ruleStats && stats.ruleStats.unmatched;
   const unmatchedRule = unmatchedStats && unmatchedStats.requests > 0
@@ -73,7 +73,7 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs,
       <PageHead eyebrow={t("dash.eyebrow")} title={t("dash.title")}
         actions={<>
           <Badge kind={healthKind}><Dot kind={healthKind} />{t("dash.ok")}</Badge>
-          <button className="btn btn-primary" onClick={openHttp}><Icon name="plus" size={16} />{t("http.addRule")}</button>
+          <button className="btn btn-primary" onClick={openProxy}><Icon name="plus" size={16} />{t("proxy.add")}</button>
         </>} />
 
       {/* hero */}
@@ -104,7 +104,7 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs,
         <div className="card">
           <div className="card-head">
             <h3>{t("dash.ruleHealth")}</h3>
-            <button className="mini-link" onClick={() => go("http")}>{t("dash.viewAll")}</button>
+            <button className="mini-link" onClick={() => go("proxy")}>{t("dash.viewAll")}</button>
           </div>
           <div className="card-body" style={{ paddingTop: 6, paddingBottom: 6 }}>
             {allRules.length === 0
@@ -158,8 +158,7 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openHttp, openWs,
             <div className="card-head"><h3>{t("dash.quick")}</h3></div>
             <div className="card-body">
               <div className="quick">
-                <button className="qbtn" onClick={openHttp}><Icon name="http" size={15} />{t("nav.http")}</button>
-                <button className="qbtn" onClick={openWs}><Icon name="ws" size={15} />{t("nav.ws")}</button>
+                <button className="qbtn" onClick={openProxy}><Icon name="http" size={15} />{t("nav.proxy")}</button>
                 <button className="qbtn" onClick={openCert}><Icon name="upload" size={15} />{t("dash.uploadCert")}</button>
                 <button className="qbtn" onClick={createBackup}><Icon name="download" size={15} />{t("dash.createBackup")}</button>
               </div>
@@ -278,4 +277,161 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
   );
 }
 
-Object.assign(window, { DashboardPage, RulesPage, RuleModal });
+function defaultProxyForm() {
+  return {
+    enabled: true, domain: "", path: "/", target: "", httpEnabled: true, httpProtocol: "HTTPS",
+    wsEnabled: false, wsProtocol: "WSS", pretend: false, priority: 1, users: []
+  };
+}
+
+function ProxyModal({ t, mode, initial, onClose, onSave }) {
+  const [f, setF] = useState(initial || defaultProxyForm());
+  const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  const users = f.users || [];
+  const valid = f.domain.trim() && f.target.trim() && (f.httpEnabled || f.wsEnabled);
+  const addUser = () => set("users", [...users, { username: "", password: "" }]);
+  const changeUser = (index, key, value) => set("users", users.map((u, i) => i === index ? { ...u, [key]: value } : u));
+  const removeUser = (index) => set("users", users.filter((_, i) => i !== index));
+
+  return (
+    <Modal onClose={onClose}
+      title={mode === "edit" ? t("proxy.edit") : t("proxy.new")}
+      foot={<>
+        <button className="btn btn-soft" onClick={onClose}>{t("common.cancel")}</button>
+        <button className="btn btn-primary" disabled={!valid} onClick={() => onSave(f)}>{t("common.save")}</button>
+      </>}>
+      <Field label={t("common.domain")} req>
+        <input className="input mono" placeholder="proxy.example.com:8443" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
+      </Field>
+      <div className="field-row">
+        <Field label={t("common.path")}>
+          <input className="input mono" placeholder="/" value={f.path} onChange={(e) => set("path", e.target.value)} />
+        </Field>
+        <Field label={t("common.target")} req hint="host:port">
+          <input className="input mono" placeholder="192.168.1.100:8080" value={f.target} onChange={(e) => set("target", e.target.value)} />
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field label={t("proxy.enableHttp")}>
+          <label className="check"><input type="checkbox" checked={f.httpEnabled} onChange={(e) => set("httpEnabled", e.target.checked)} /><span>{t("common.enabled")}</span></label>
+        </Field>
+        <Field label={t("common.protocol")}>
+          <select className="select" value={f.httpProtocol} onChange={(e) => set("httpProtocol", e.target.value)} disabled={!f.httpEnabled}>
+            <option>HTTP</option><option>HTTPS</option>
+          </select>
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field label={t("proxy.enableWs")}>
+          <label className="check"><input type="checkbox" checked={f.wsEnabled} onChange={(e) => set("wsEnabled", e.target.checked)} /><span>{t("common.enabled")}</span></label>
+        </Field>
+        <Field label={t("common.protocol")}>
+          <select className="select" value={f.wsProtocol} onChange={(e) => set("wsProtocol", e.target.value)} disabled={!f.wsEnabled}>
+            <option>WS</option><option>WSS</option>
+          </select>
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field label={t("common.priority")}>
+          <input className="input mono" type="number" min="1" value={f.priority} onChange={(e) => set("priority", +e.target.value)} />
+        </Field>
+        <div className="field" style={{ justifyContent: "flex-end" }}>
+          <label className="check"><input type="checkbox" checked={f.pretend} onChange={(e) => set("pretend", e.target.checked)} /><span>{t("http.pretend")}</span></label>
+        </div>
+      </div>
+      <label className="check" style={{ marginBottom: 14 }}>
+        <input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /><span>{t("common.enabled")}</span>
+      </label>
+
+      <div className="rowsplit" style={{ paddingTop: 14 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 2 }}>{t("proxy.auth")}</div>
+          <div className="hint">{t("proxy.passwordKeep")}</div>
+        </div>
+        <button className="btn btn-soft" onClick={addUser} type="button"><Icon name="plus" size={15} />{t("proxy.addAccount")}</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+        {users.map((u, index) => (
+          <div key={index} className="field-row" style={{ gridTemplateColumns: "1fr 1fr auto", alignItems: "end" }}>
+            <Field label={t("proxy.username")}>
+              <input className="input mono" value={u.username || ""} onChange={(e) => changeUser(index, "username", e.target.value)} />
+            </Field>
+            <Field label={t("proxy.password")} hint={u.hash ? `MD5 ${String(u.hash).slice(0, 8)}...` : ""}>
+              <input className="input mono" type="password" placeholder={u.hash ? t("proxy.passwordKeep") : ""} value={u.password || ""} onChange={(e) => changeUser(index, "password", e.target.value)} />
+            </Field>
+            <button className="btn btn-soft btn-icon" onClick={() => removeUser(index)} title={t("common.delete")} type="button"><Icon name="trash" size={16} /></button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast }) {
+  const [editing, setEditing] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const openNew = () => { setEditing(null); setModalOpen(true); };
+  const openEdit = (entry) => { setEditing(entry); setModalOpen(true); };
+  const onSave = async (data) => {
+    await save(data, editing);
+    setModalOpen(false);
+    setEditing(null);
+    toast(t("proxy.saved"));
+  };
+  const onDelete = async () => {
+    await remove(confirm);
+    setConfirm(null);
+    toast(t("toast.deleted"));
+  };
+
+  return (
+    <div>
+      <PageHead eyebrow={t("proxy.eyebrow")} title={t("proxy.title")} sub={t("proxy.sub")}
+        actions={<button className="btn btn-primary" onClick={openNew}><Icon name="plus" size={16} />{t("proxy.add")}</button>} />
+
+      <div className="card">
+        {entries.length === 0
+          ? <Empty icon="http" title={t("proxy.empty")} sub={t("proxy.emptySub")}
+              action={<button className="btn btn-primary" onClick={openNew}><Icon name="plus" size={16} />{t("proxy.add")}</button>} />
+          : <div className="tablewrap"><table className="table">
+            <thead><tr>
+              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.path")}</th>
+              <th>{t("common.target")}</th><th>{t("proxy.protocols")}</th><th>{t("proxy.accounts")}</th>
+              <th>{t("common.priority")}</th><th className="td-right">{t("common.actions")}</th>
+            </tr></thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.enabled ? <Badge kind="ok">{t("common.enabled")}</Badge> : <Badge kind="neutral">{t("common.disabled")}</Badge>}</td>
+                  <td className="mono cell-host">{entry.domain}</td>
+                  <td className="mono cell-dim">{entry.path || "/"}</td>
+                  <td className="mono">{entry.target}</td>
+                  <td>
+                    <div className="flex gap-10">
+                      {entry.httpEnabled && <Badge kind={entry.httpProtocol === "HTTPS" ? "accent" : "neutral"} className="badge-proto">{entry.httpProtocol}</Badge>}
+                      {entry.wsEnabled && <Badge kind={entry.wsProtocol === "WSS" ? "accent" : "neutral"} className="badge-proto">{entry.wsProtocol}</Badge>}
+                    </div>
+                  </td>
+                  <td className="mono">{(entry.users || []).length}</td>
+                  <td className="mono">{entry.priority}</td>
+                  <td><div className="cell-actions">
+                    <button className="btn btn-soft btn-icon" onClick={() => openEdit(entry)} title={t("common.edit")}><Icon name="edit" size={16} /></button>
+                    <button className="btn btn-soft btn-icon" onClick={() => setConfirm(entry)} title={t("common.delete")}><Icon name="trash" size={16} /></button>
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>}
+      </div>
+
+      {modalOpen && <ProxyModal t={t} mode={editing ? "edit" : "new"} initial={editing} onClose={() => { setModalOpen(false); setEditing(null); }} onSave={onSave} />}
+      {confirm && <Modal sm onClose={() => setConfirm(null)} title={t("proxy.delTitle")} desc={t("proxy.delDesc")}
+        foot={<><button className="btn btn-soft" onClick={() => setConfirm(null)}>{t("common.cancel")}</button>
+          <button className="btn btn-danger" onClick={onDelete}><Icon name="trash" size={15} />{t("common.delete")}</button></>}>
+        <div className="mono" style={{ padding: "4px 0 8px", color: "var(--text-2)" }}>{confirm.domain}{confirm.path} <span className="muted">→ {confirm.target}</span></div>
+      </Modal>}
+    </div>
+  );
+}
+
+Object.assign(window, { DashboardPage, RulesPage, RuleModal, ProxyPage, ProxyModal });
