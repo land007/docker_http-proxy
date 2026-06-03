@@ -1,8 +1,11 @@
 name: Build and Push Docker Image
 
-# Build only when a version tag is pushed (e.g. v1.0.0). Manual runs allowed too.
+# Build latest on normal branch pushes, and versioned images on tags.
 on:
   push:
+    branches:
+      - master
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -62,7 +65,6 @@ jobs:
       # on top of it. Requires a DISPATCH_PAT secret (a PAT with repo scope on the
       # land007/docker_http-proxy-acme repository). Skipped gracefully if absent.
       - name: Trigger ACME image rebuild
-        if: github.ref_type == 'tag'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
@@ -71,6 +73,10 @@ jobs:
             echo "DISPATCH_PAT not set — skipping cross-repo cascade."
             exit 0
           fi
+          BASE_TAG="latest"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            BASE_TAG="${GITHUB_REF_NAME#v}"
+          fi
           gh api "repos/${{ github.repository_owner }}/docker_http-proxy-acme/dispatches" \
             -f "event_type=base-updated" \
-            -F "client_payload[version]=${GITHUB_REF_NAME#v}"
+            -F "client_payload[version]=$BASE_TAG"
