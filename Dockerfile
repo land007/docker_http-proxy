@@ -16,6 +16,7 @@ ADD node/config-validator.js /node_/config-validator.js
 ADD node/auth-manager.js /node_/auth-manager.js
 ADD node/acme-manager.js /node_/acme-manager.js
 ADD node/proxy-stats.js /node_/proxy-stats.js
+ADD node/data-paths.js /node_/data-paths.js
 ADD node/web-ui /node_/web-ui
 ADD ddns /node_/ddns
 
@@ -35,15 +36,15 @@ ENV username="land007" \
 	ws_proxy_paths="/api/,/" \
 	ws_proxy_hosts="192.168.1.218,192.168.1.218" \
 	ws_proxy_ports="8080,3000" \
-	ws_proxy_pretends="true,true"
+	ws_proxy_pretends="true,true" \
+	DATA_DIR="/node_/data"
 
 ADD node/start.sh /node_/
-ADD node/cert /node_/cert
+ADD node/cert /node_/seed/cert
 RUN sed -i 's/\r//' /node_/start.sh
-ADD node/admin_users.json /node_/admin_users.json
-ADD proxy-config.json /node_/proxy-config.json
+ADD node/admin_users.json /node_/seed/admin_users.json
+ADD proxy-config.json /node_/seed/proxy-config.json
 
-ENV DOMAIN_NAME=voice.qhkly.com
 EXPOSE 80
 EXPOSE 443
 EXPOSE 8443
@@ -54,6 +55,11 @@ RUN npm install -g supervisor
 # Create simplified start script
 RUN echo '#!/bin/bash\n\
 export NODE_PATH=/usr/local/lib/node_modules\n\
+: "${DATA_DIR:=/node_/data}"\n\
+mkdir -p "$DATA_DIR/cert" "$DATA_DIR/backups" "$DATA_DIR/sessions"\n\
+[ -f "$DATA_DIR/proxy-config.json" ] || cp /node_/seed/proxy-config.json "$DATA_DIR/"\n\
+[ -f "$DATA_DIR/admin_users.json" ] || cp /node_/seed/admin_users.json "$DATA_DIR/"\n\
+if [ -d /node_/seed/cert ] && [ -z "$(ls -A "$DATA_DIR/cert" 2>/dev/null)" ]; then cp -a /node_/seed/cert/. "$DATA_DIR/cert/"; fi\n\
 while true; do node /node_/ddns/ddns-server.js >> /tmp/ddns-server.log 2>&1; sleep 2; done &\n\
 export ADMIN_API_PORT=${ADMIN_API_PORT:-18444}\n\
 export PUBLIC_ADMIN_PORT=${PUBLIC_ADMIN_PORT:-${ADMIN_PORT:-8444}}\n\
@@ -62,6 +68,8 @@ nohup node /node_/admin-api.js > /tmp/admin-api.log 2>&1 &\n\
 while true; do node /node_/ddns/admin-splitter.js >> /tmp/admin-splitter.log 2>&1; sleep 2; done &\n\
 supervisor -w /node_/ -i node_modules /node_/server.js\n\
 ' > /node_/start-simple.sh && chmod +x /node_/start-simple.sh
+
+VOLUME ["/node_/data"]
 
 CMD ["/node_/start-simple.sh"]
 

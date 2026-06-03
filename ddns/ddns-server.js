@@ -7,10 +7,11 @@ const http = require("http");
 const https = require("https");
 const path = require("path");
 const { URL } = require("url");
+const dataPaths = require("../data-paths");
 
 const HOST = process.env.DDNS_HOST || "127.0.0.1";
 const PORT = Number(process.env.DDNS_PORT || 8500);
-const CONFIG_FILE = process.env.DDNS_CONFIG || "/node_/ddns-config.json";
+const CONFIG_FILE = dataPaths.DDNS_CONFIG;
 const DEFAULT_INTERVAL = Number(process.env.DDNS_INTERVAL || 300);
 const IP_CACHE_MS = 30 * 1000;
 const MASK = "__KEEP__";

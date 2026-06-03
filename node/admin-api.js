@@ -19,6 +19,7 @@ const configLoader = require('./proxy-config-loader');
 const configValidator = require('./config-validator');
 const acmeManager = require('./acme-manager');
 const proxyStats = require('./proxy-stats');
+const dataPaths = require('./data-paths');
 const { body, validationResult, param } = require('express-validator');
 
 const app = express();
@@ -42,7 +43,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(session({
 	secret: authManager.getSessionSecret(),
 	store: new FileStore({
-		path: path.join(__dirname, 'sessions'),
+		path: dataPaths.SESSIONS_DIR,
 		ttl: authManager.getSessionMaxAge() / 1000
 	}),
 	resave: false,
@@ -517,7 +518,7 @@ app.get('/api/certificates', requireAuth, (req, res) => {
 		// Add certificate expiry info
 		const certsWithInfo = certs.map(cert => {
 			try {
-				const certPath = path.join(__dirname, cert.certFile);
+				const certPath = dataPaths.resolve(cert.certFile);
 				if (fs.existsSync(certPath)) {
 					const certData = fs.readFileSync(certPath, 'utf-8');
 					// Simple parsing to get expiry date
@@ -571,7 +572,7 @@ app.post('/api/certificates', requireAuth, upload.fields([
 		}
 
 		// Save files
-		const certDir = path.join(__dirname, 'cert');
+		const certDir = dataPaths.CERT_DIR;
 		if (!fs.existsSync(certDir)) {
 			fs.mkdirSync(certDir, { recursive: true });
 		}
@@ -635,8 +636,8 @@ app.delete('/api/certificates/:domain', requireAuth, [
 		const cert = config.sslCertificates[certIndex];
 
 		// Delete files
-		const certPath = path.join(__dirname, cert.certFile);
-		const keyPath = path.join(__dirname, cert.keyFile);
+		const certPath = dataPaths.resolve(cert.certFile);
+		const keyPath = dataPaths.resolve(cert.keyFile);
 
 		if (fs.existsSync(certPath)) {
 			fs.unlinkSync(certPath);
@@ -711,7 +712,7 @@ app.delete('/api/backups/:name', requireAuth, [
 	param('name').isString()
 ], handleValidationErrors, async (req, res) => {
 	try {
-		const backupPath = path.join(__dirname, 'backups', req.params.name);
+		const backupPath = path.join(dataPaths.BACKUP_DIR, req.params.name);
 		if (!fs.existsSync(backupPath)) {
 			return res.status(404).json({ error: 'Backup not found' });
 		}
@@ -945,7 +946,7 @@ async function startServer() {
 
 		// Try to create HTTPS server with existing certificates
 		let server;
-		const certDir = path.join(__dirname, 'cert');
+		const certDir = dataPaths.CERT_DIR;
 
 		// Force HTTP mode if ADMIN_HTTP_MODE is set
 		const forceHttpMode = process.env.ADMIN_HTTP_MODE === 'true';

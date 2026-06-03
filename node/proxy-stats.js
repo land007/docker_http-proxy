@@ -1,7 +1,6 @@
 const fs = require('fs');
-const path = require('path');
+const { STATS_FILE } = require('./data-paths');
 
-const STATS_FILE = path.join(__dirname, 'proxy-stats.json');
 const BUCKET_MS = 60 * 1000;
 const BUCKET_COUNT = 24 * 60;
 const MAX_RULE_STATS = 200;

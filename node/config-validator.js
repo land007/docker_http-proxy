@@ -4,7 +4,7 @@
  */
 
 const fs = require('fs');
-const path = require('path');
+const dataPaths = require('./data-paths');
 
 const CONFIG_SCHEMA = {
 	version: { type: 'string', required: true, pattern: /^\d+\.\d+$/ },
@@ -337,18 +337,17 @@ class ConfigValidator {
 	 */
 	validateCertFiles(certs) {
 		const errors = [];
-		const certDir = path.join(__dirname, 'cert');
 
 		certs.forEach((cert, index) => {
 			if (cert.certFile) {
-				const certPath = path.join(__dirname, cert.certFile);
+				const certPath = dataPaths.resolve(cert.certFile);
 				if (!fs.existsSync(certPath)) {
 					errors.push(`sslCertificates[${index}].certFile does not exist: ${cert.certFile}`);
 				}
 			}
 
 			if (cert.keyFile) {
-				const keyPath = path.join(__dirname, cert.keyFile);
+				const keyPath = dataPaths.resolve(cert.keyFile);
 				if (!fs.existsSync(keyPath)) {
 					errors.push(`sslCertificates[${index}].keyFile does not exist: ${cert.keyFile}`);
 				}

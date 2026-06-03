@@ -4,11 +4,10 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { ADMIN_USERS_PATH } = require('./data-paths');
 
-const ADMIN_USERS_PATH = path.join(__dirname, 'admin_users.json');
 const SALT_ROUNDS = 10;
 const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD-Admin';
 // Session lifetime (default 24h). Overridable via ADMIN_SESSION_MAX_AGE_MS.

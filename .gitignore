@@ -6,6 +6,7 @@ backups/
 sessions/
 /cert/
 /admin_users.json
+/data/
 
 # editor / OS junk
 **/.DS_Store

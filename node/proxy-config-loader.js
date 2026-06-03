@@ -7,10 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
 const configValidator = require('./config-validator');
+const dataPaths = require('./data-paths');
 
-const CONFIG_PATH = path.join(__dirname, 'proxy-config.json');
-const BACKUP_DIR = path.join(__dirname, 'backups');
-const IMPORTED_MARKER = path.join(__dirname, '.env-imported');
+const { CONFIG_PATH, BACKUP_DIR, IMPORTED_MARKER } = dataPaths;
 const RELOAD_DEBOUNCE_MS = 500;
 
 class ProxyConfigLoader {
@@ -410,7 +409,7 @@ class ProxyConfigLoader {
 		};
 
 		// Add SSL certificates for detected domains
-		const certDir = path.join(__dirname, 'cert');
+		const certDir = dataPaths.CERT_DIR;
 		if (fs.existsSync(certDir)) {
 			const files = fs.readdirSync(certDir);
 			const domains = new Set();

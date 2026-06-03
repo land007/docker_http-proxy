@@ -10,9 +10,10 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 const configLoader = require('./proxy-config-loader');
+const dataPaths = require('./data-paths');
 
 const ACME_PATH = process.env.ACME_SH_PATH || '/root/.acme.sh/acme.sh';
-const CERT_DIR = path.join(__dirname, 'cert');
+const CERT_DIR = dataPaths.CERT_DIR;
 const EXEC_TIMEOUT_MS = parseInt(process.env.ACME_EXEC_TIMEOUT_MS || '600000', 10);
 
 function parsePositiveInt(value, fallback) {
@@ -180,7 +181,7 @@ async function listCerts() {
 
 	return Promise.all(certs.map(async cert => ({
 		...cert,
-		expiresAt: await getCertificateExpiry(path.join(__dirname, cert.certFile)) || cert.expiresAt || null
+		expiresAt: await getCertificateExpiry(dataPaths.resolve(cert.certFile)) || cert.expiresAt || null
 	})));
 }
 

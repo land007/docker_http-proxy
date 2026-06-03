@@ -1,8 +1,6 @@
 version: "2.1"
 networks:
   internal_network:
-volumes:
-  proxy_backups:
 services:
   724_http-proxy:
     restart: always
@@ -16,8 +14,7 @@ services:
         max-size: "300k"
         max-file: "3"
     volumes:
-      - proxy_backups:/node_/backups
-      - ./ddns-config.json:/node_/ddns-config.json
+      - ./data:/node_/data
     environment:
       - "DOMAIN_NAME=www.gjxt.xyz"
       - "username=gjxt"

@@ -7,11 +7,11 @@ const url = require("url");
 const fs = require("fs");
 const tls = require('tls');
 const path = require('path');
-const sep = path.sep;
 const net = require('net');
 const NodeSession = require('node-session');
 const configLoader = require('./proxy-config-loader');
 const proxyStats = require('./proxy-stats');
+const dataPaths = require('./data-paths');
 
 var nodeSession = new NodeSession({
 	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
@@ -117,8 +117,8 @@ var netPort = 8443;
 //function to pick out the key + certs dynamically based on the domain name
 const getSecureContext = function(domain) {
 	let config = {
-		key: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_key.key'),
-		cert: fs.readFileSync(__dirname + sep + 'cert' + sep + domain + '_chain.crt')
+		key: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${domain}_key.key`)),
+		cert: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${domain}_chain.crt`))
 	};
 	let credentials;
 	if (tls.createSecureContext) {
@@ -143,7 +143,7 @@ const tryGetSecureContext = function(domain) {
 //even before any real certificate has been issued (e.g. a fresh ACME deployment with an empty cert dir)
 const DEFAULT_CERT_DOMAIN = '_default';
 const ensureDefaultCertDomain = function() {
-	const certDir = __dirname + sep + 'cert';
+	const certDir = dataPaths.CERT_DIR;
 	const candidates = ['www.gjxt.xyz', domainName];
 	try {
 		fs.readdirSync(certDir)
@@ -153,7 +153,7 @@ const ensureDefaultCertDomain = function() {
 
 	for (const d of candidates) {
 		if (!d) continue;
-		if (fs.existsSync(certDir + sep + d + '_key.key') && fs.existsSync(certDir + sep + d + '_chain.crt')) {
+		if (fs.existsSync(path.join(certDir, `${d}_key.key`)) && fs.existsSync(path.join(certDir, `${d}_chain.crt`))) {
 			return d;
 		}
 	}
@@ -162,8 +162,8 @@ const ensureDefaultCertDomain = function() {
 	if (!fs.existsSync(certDir)) {
 		fs.mkdirSync(certDir, { recursive: true });
 	}
-	const keyPath = certDir + sep + DEFAULT_CERT_DOMAIN + '_key.key';
-	const certPath = certDir + sep + DEFAULT_CERT_DOMAIN + '_chain.crt';
+	const keyPath = path.join(certDir, `${DEFAULT_CERT_DOMAIN}_key.key`);
+	const certPath = path.join(certDir, `${DEFAULT_CERT_DOMAIN}_chain.crt`);
 	require('child_process').execSync(
 		`openssl req -x509 -newkey rsa:2048 -nodes -keyout "${keyPath}" -out "${certPath}" -days 3650 -subj "/CN=localhost"`,
 		{ stdio: 'ignore' }
@@ -188,8 +188,8 @@ function loadCertificates() {
 	if (config && config.sslCertificates) {
 		config.sslCertificates.forEach(cert => {
 			try {
-				const certPath = path.join(__dirname, cert.certFile);
-				const keyPath = path.join(__dirname, cert.keyFile);
+				const certPath = dataPaths.resolve(cert.certFile);
+				const keyPath = dataPaths.resolve(cert.keyFile);
 
 				if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
 					secureContext[cert.domain] = getSecureContext(cert.domain);
@@ -222,8 +222,8 @@ const options = {
 		}
 		//throw new Error('No keys/certificates for domain requested');
 	},
-	key: fs.readFileSync(__dirname + sep + 'cert' + sep + defaultCertDomain + '_key.key'),
-	cert: fs.readFileSync(__dirname + sep + 'cert' + sep + defaultCertDomain + '_chain.crt')
+	key: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${defaultCertDomain}_key.key`)),
+	cert: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${defaultCertDomain}_chain.crt`))
 };
 
 const getClientIp = function(req) {
