@@ -177,7 +177,7 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
 }
 
 /* ===================== SETTINGS ===================== */
-function SettingsPage({ t, settings, saveSettings, changePassword, toast }) {
+function SettingsPage({ t, settings, saveSettings, changePassword, toast, forcePasswordChange }) {
   const [f, setF] = useStateC(settings);
   const [pw, setPw] = useStateC({ oldPassword: "", newPassword: "", confirmPassword: "" });
   const [pwBusy, setPwBusy] = useStateC(false);
@@ -199,6 +199,9 @@ function SettingsPage({ t, settings, saveSettings, changePassword, toast }) {
   return (
     <div>
       <PageHead eyebrow={t("settings.eyebrow")} title={t("settings.title")} sub={t("settings.sub")} />
+      {forcePasswordChange && <div className="card card-pad" style={{ maxWidth: 720, marginBottom: 16, borderColor: "var(--warn)" }}>
+        <Badge kind="warn"><Dot kind="warn" />{t("settings.mustChangePassword")}</Badge>
+      </div>}
       <div className="card" style={{ maxWidth: 720 }}>
         <div className="card-body">
           <div className="field-row">

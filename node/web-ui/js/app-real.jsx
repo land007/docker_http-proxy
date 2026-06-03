@@ -125,6 +125,7 @@ function App() {
   const [ddnsStatus, setDdnsStatus] = useState({ ip4: "", ip6: "", entries: [] });
   const [settings, setSettings] = useState({ maxSessions: 0, defaultUser: "", defaultPass: "", enableAuth: false });
   const [backups, setBackups] = useState([]);
+  const mustChangePassword = !!(user && user.mustChangePassword);
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); saveLS("pa.theme", theme); }, [theme]);
   useEffect(() => saveLS("pa.lang", lang), [lang]);
@@ -191,6 +192,7 @@ function App() {
       try {
         const me = await api.get("/api/auth/me");
         setUser(me.user);
+        if (me.user && me.user.mustChangePassword) setRoute("settings");
         await reloadAll();
       } catch (error) {
         if (error.message !== "Unauthorized") fail(error);
@@ -429,14 +431,30 @@ function App() {
     backup: backups.length,
   }), [proxyEntries.length, certs.length, ddns.entries.length, backups.length]);
 
-  const go = (r) => { setModal(null); setRoute(r); };
-  const openOn = (r) => { setRoute(r); setModal(r); };
+  const go = (r) => {
+    setModal(null);
+    if (mustChangePassword && r !== "settings") {
+      setRoute("settings");
+      toast(t("settings.mustChangePassword"));
+      return;
+    }
+    setRoute(r);
+  };
+  const openOn = (r) => {
+    if (mustChangePassword && r !== "settings") {
+      setRoute("settings");
+      toast(t("settings.mustChangePassword"));
+      return;
+    }
+    setRoute(r);
+    setModal(r);
+  };
   const mOpen = (key) => modal === key;
   const setMOpen = (key) => (v) => setModal(v ? key : null);
 
   return (
     <div className="app">
-      <Sidebar route={route} setRoute={go} t={t} lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} counts={counts} user={user} onLogout={logout} />
+      <Sidebar route={route} setRoute={go} t={t} lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} counts={counts} user={user} onLogout={logout} locked={mustChangePassword} />
       <main className="main">
         {route === "dashboard" && <DashboardPage t={t} lang={lang} http={http} ws={ws} certs={certs} status={status} go={go}
           openProxy={() => openOn("proxy")} openCert={() => openOn("cert")} createBackup={createBackup} />}
@@ -446,7 +464,7 @@ function App() {
           uploadCert={uploadCert} deleteCert={deleteCert} issueAcme={issueAcme} renewAcme={renewAcme} toast={toast} />}
         {route === "ddns" && <DdnsPage t={t} lang={lang} config={ddns} status={ddnsStatus} providers={ddnsProviders} modalOpen={mOpen("ddns")} setModalOpen={setMOpen("ddns")}
           save={saveDdns} remove={deleteDdns} sync={syncDdns} toast={toast} />}
-        {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} changePassword={changePassword} toast={toast} />}
+        {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} changePassword={changePassword} toast={toast} forcePasswordChange={mustChangePassword} />}
         {route === "backup" && <BackupPage t={t} lang={lang} backups={backups} createBackup={createBackup} restoreBackup={restoreBackup} deleteBackup={deleteBackup} toast={toast} />}
       </main>
 

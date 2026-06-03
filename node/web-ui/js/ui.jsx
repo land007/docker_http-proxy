@@ -138,7 +138,7 @@ const NAV_ITEMS = [
   ["dashboard", "dashboard"], ["proxy", "http"], ["cert", "cert"], ["ddns", "ddns"], ["settings", "settings"], ["backup", "backup"],
 ];
 
-function Sidebar({ route, setRoute, t, lang, setLang, theme, setTheme, counts, user, onLogout }) {
+function Sidebar({ route, setRoute, t, lang, setLang, theme, setTheme, counts, user, onLogout, locked }) {
   const username = user && user.username ? user.username : "admin";
   return (
     <aside className="side">
@@ -149,7 +149,7 @@ function Sidebar({ route, setRoute, t, lang, setLang, theme, setTheme, counts, u
       <nav className="nav">
         <div className="nav-label">{t("nav.group")}</div>
         {NAV_ITEMS.map(([key, icon]) => (
-          <button key={key} className={"navitem" + (route === key ? " is-active" : "")} onClick={() => setRoute(key)}>
+          <button key={key} className={"navitem" + (route === key ? " is-active" : "")} disabled={locked && key !== "settings"} onClick={() => setRoute(key)}>
             <Icon name={icon} size={17} />
             <span>{t("nav." + key)}</span>
             {counts[key] != null && counts[key] > 0 && <span className="badge-count">{counts[key]}</span>}
