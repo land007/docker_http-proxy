@@ -93,11 +93,13 @@ async function initializeConfiguration() {
 		console.log('🔧 Initializing configuration loader...');
 		await configLoader.initialize();
 		updateConfiguration();
+		loadCertificates();
 
 		// Register for configuration reloads
 		configLoader.onReload((newConfig, oldConfig) => {
 			console.log('🔄 Configuration reloaded, updating proxy...');
 			updateConfiguration();
+			loadCertificates();
 		});
 
 		console.log('✅ Configuration loader initialized');
@@ -114,11 +116,19 @@ var httpPort = 80;
 var httpsPort = 443;
 var netPort = 8443;
 
+const normalizeTlsDomain = function(domain) {
+	return String(domain || '')
+		.trim()
+		.toLowerCase()
+		.replace(/\.$/, '')
+		.replace(/:\d+$/, '');
+}
+
 //function to pick out the key + certs dynamically based on the domain name
-const getSecureContext = function(domain) {
+const getSecureContextFromFiles = function(keyPath, certPath) {
 	let config = {
-		key: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${domain}_key.key`)),
-		cert: fs.readFileSync(path.join(dataPaths.CERT_DIR, `${domain}_chain.crt`))
+		key: fs.readFileSync(keyPath),
+		cert: fs.readFileSync(certPath)
 	};
 	let credentials;
 	if (tls.createSecureContext) {
@@ -129,9 +139,19 @@ const getSecureContext = function(domain) {
 	return credentials.context;
 }
 
+const getSecureContext = function(domain) {
+	return getSecureContextFromFiles(
+		path.join(dataPaths.CERT_DIR, `${domain}_key.key`),
+		path.join(dataPaths.CERT_DIR, `${domain}_chain.crt`)
+	);
+}
+
 //safely build a secure context; returns null when the cert files are missing/unreadable
-const tryGetSecureContext = function(domain) {
+const tryGetSecureContext = function(domain, certFile, keyFile) {
 	try {
+		if (certFile && keyFile) {
+			return getSecureContextFromFiles(dataPaths.resolve(keyFile), dataPaths.resolve(certFile));
+		}
 		return getSecureContext(domain);
 	} catch (error) {
 		console.warn(`⚠️  Certificate for "${domain}" not available: ${error.message}`);
@@ -142,9 +162,10 @@ const tryGetSecureContext = function(domain) {
 //ensure there is always at least one usable key/cert so the HTTPS server can start,
 //even before any real certificate has been issued (e.g. a fresh ACME deployment with an empty cert dir)
 const DEFAULT_CERT_DOMAIN = '_default';
+const FALLBACK_CERT_DOMAIN = 'www.gjxt.xyz';
 const ensureDefaultCertDomain = function() {
 	const certDir = dataPaths.CERT_DIR;
-	const candidates = ['www.gjxt.xyz', domainName];
+	const candidates = [FALLBACK_CERT_DOMAIN, domainName];
 	try {
 		fs.readdirSync(certDir)
 			.filter(f => f.endsWith('_chain.crt'))
@@ -174,16 +195,25 @@ const ensureDefaultCertDomain = function() {
 
 const defaultCertDomain = ensureDefaultCertDomain();
 
-//read available certs into memory (skip any missing so startup can't crash)
 const secureContext = {};
-['www.gjxt.xyz', domainName, defaultCertDomain].forEach(function(d) {
-	if (!d || secureContext[d]) return;
-	const ctx = tryGetSecureContext(d);
-	if (ctx) secureContext[d] = ctx;
-});
+
+const setSecureContext = function(domain, ctx) {
+	const normalized = normalizeTlsDomain(domain);
+	if (normalized && ctx) {
+		secureContext[normalized] = ctx;
+	}
+}
 
 // Load additional certificates from config
 function loadCertificates() {
+	Object.keys(secureContext).forEach(domain => delete secureContext[domain]);
+
+	[FALLBACK_CERT_DOMAIN, domainName, defaultCertDomain].forEach(function(d) {
+		if (!d || secureContext[normalizeTlsDomain(d)]) return;
+		const ctx = tryGetSecureContext(d);
+		setSecureContext(d, ctx);
+	});
+
 	const config = configLoader.getConfig();
 	if (config && config.sslCertificates) {
 		config.sslCertificates.forEach(cert => {
@@ -192,7 +222,7 @@ function loadCertificates() {
 				const keyPath = dataPaths.resolve(cert.keyFile);
 
 				if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-					secureContext[cert.domain] = getSecureContext(cert.domain);
+					setSecureContext(cert.domain, tryGetSecureContext(cert.domain, cert.certFile, cert.keyFile));
 					console.log(`✅ Loaded certificate for domain: ${cert.domain}`);
 				}
 			} catch (error) {
@@ -202,18 +232,18 @@ function loadCertificates() {
 	}
 }
 
-// Load certificates after config is initialized
-setTimeout(() => {
-	try {
-		loadCertificates();
-	} catch (error) {
-		console.error('⛔ Error loading certificates:', error);
+const findSecureContext = function(domain) {
+	const normalized = normalizeTlsDomain(domain);
+	if (secureContext[normalized]) {
+		return secureContext[normalized];
 	}
-}, 1000);
+
+	return secureContext[normalizeTlsDomain(FALLBACK_CERT_DOMAIN)] || secureContext[normalizeTlsDomain(defaultCertDomain)];
+}
 
 const options = {
 	SNICallback: function(domain, cb) {
-		const ctx = secureContext[domain] || secureContext[defaultCertDomain] || secureContext['www.gjxt.xyz'];
+		const ctx = findSecureContext(domain);
 		if (cb) {
 			cb(null, ctx);
 		} else {
