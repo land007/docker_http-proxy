@@ -311,25 +311,25 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
           <input className="input mono" placeholder="192.168.1.100:8080" value={f.target} onChange={(e) => set("target", e.target.value)} />
         </Field>
       </div>
-      <div className="field-row">
-        <Field label={t("proxy.enableHttp")}>
-          <label className="check"><input type="checkbox" checked={f.httpEnabled} onChange={(e) => set("httpEnabled", e.target.checked)} /><span>{t("common.enabled")}</span></label>
-        </Field>
-        <Field label={t("common.protocol")}>
+      <div className="proto-block">
+        <div className="proto-col">
+          <label className="check">
+            <input type="checkbox" checked={f.httpEnabled} onChange={(e) => set("httpEnabled", e.target.checked)} />
+            <span>{t("proxy.enableHttp")}</span>
+          </label>
           <select className="select" value={f.httpProtocol} onChange={(e) => set("httpProtocol", e.target.value)} disabled={!f.httpEnabled}>
             <option>HTTP</option><option>HTTPS</option>
           </select>
-        </Field>
-      </div>
-      <div className="field-row">
-        <Field label={t("proxy.enableWs")}>
-          <label className="check"><input type="checkbox" checked={f.wsEnabled} onChange={(e) => set("wsEnabled", e.target.checked)} /><span>{t("common.enabled")}</span></label>
-        </Field>
-        <Field label={t("common.protocol")}>
+        </div>
+        <div className="proto-col">
+          <label className="check">
+            <input type="checkbox" checked={f.wsEnabled} onChange={(e) => set("wsEnabled", e.target.checked)} />
+            <span>{t("proxy.enableWs")}</span>
+          </label>
           <select className="select" value={f.wsProtocol} onChange={(e) => set("wsProtocol", e.target.value)} disabled={!f.wsEnabled}>
             <option>WS</option><option>WSS</option>
           </select>
-        </Field>
+        </div>
       </div>
       <div className="field-row">
         <Field label={t("common.priority")}>
@@ -343,25 +343,27 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
         <input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /><span>{t("common.enabled")}</span>
       </label>
 
-      <div className="rowsplit" style={{ paddingTop: 14 }}>
-        <div>
-          <div className="label" style={{ marginBottom: 2 }}>{t("proxy.auth")}</div>
-          <div className="hint">{t("proxy.passwordKeep")}</div>
-        </div>
-        <button className="btn btn-soft" onClick={addUser} type="button"><Icon name="plus" size={15} />{t("proxy.addAccount")}</button>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-        {users.map((u, index) => (
-          <div key={index} className="field-row" style={{ gridTemplateColumns: "1fr 1fr auto", alignItems: "end" }}>
-            <Field label={t("proxy.username")}>
-              <input className="input mono" value={u.username || ""} onChange={(e) => changeUser(index, "username", e.target.value)} />
-            </Field>
-            <Field label={t("proxy.password")} hint={u.hash ? `MD5 ${String(u.hash).slice(0, 8)}...` : ""}>
-              <input className="input mono" type="password" placeholder={u.hash ? t("proxy.passwordKeep") : ""} value={u.password || ""} onChange={(e) => changeUser(index, "password", e.target.value)} />
-            </Field>
-            <button className="btn btn-soft btn-icon" onClick={() => removeUser(index)} title={t("common.delete")} type="button"><Icon name="trash" size={16} /></button>
+      <div className="acct-sec">
+        <div className="acct-head">
+          <div>
+            <div className="label" style={{ marginBottom: 2 }}>{t("proxy.auth")}</div>
+            <div className="hint">{t("proxy.passwordKeep")}</div>
           </div>
-        ))}
+          <button className="btn btn-soft" onClick={addUser} type="button"><Icon name="plus" size={15} />{t("proxy.addAccount")}</button>
+        </div>
+        <div className="acct-list">
+          {users.map((u, index) => (
+            <div key={index} className="acct-row">
+              <Field label={t("proxy.username")}>
+                <input className="input mono" value={u.username || ""} onChange={(e) => changeUser(index, "username", e.target.value)} />
+              </Field>
+              <Field label={t("proxy.password")} hint={u.hash ? `MD5 ${String(u.hash).slice(0, 8)}...` : ""}>
+                <input className="input mono" type="password" placeholder={u.hash ? t("proxy.passwordKeep") : ""} value={u.password || ""} onChange={(e) => changeUser(index, "password", e.target.value)} />
+              </Field>
+              <button className="btn btn-soft btn-icon" onClick={() => removeUser(index)} title={t("common.delete")} type="button"><Icon name="trash" size={16} /></button>
+            </div>
+          ))}
+        </div>
       </div>
     </Modal>
   );

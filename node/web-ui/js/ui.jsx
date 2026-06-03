@@ -9,6 +9,7 @@ const ICON = {
   users: "M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm8 3a8 8 0 0 0-.2-1.8l2-1.5-2-3.4-2.3 1a8 8 0 0 0-3-1.8L14 1h-4l-.5 2.5a8 8 0 0 0-3 1.8l-2.3-1-2 3.4 2 1.5A8 8 0 0 0 4 12c0 .6.1 1.2.2 1.8l-2 1.5 2 3.4 2.3-1a8 8 0 0 0 3 1.8L10 23h4l.5-2.5a8 8 0 0 0 3-1.8l2.3 1 2-3.4-2-1.5c.1-.6.2-1.2.2-1.8Z",
   backup: "M4 7h16M4 12h16M4 17h16",
+  ddns: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c2.5 2.5 2.5 15.5 0 18M3.5 9h17M3.5 15h17M8 12h8m-4-4v8",
   plus: "M12 5v14M5 12h14",
   edit: "M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3ZM13.5 6.5l3 3",
   trash: "M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7",
@@ -134,7 +135,7 @@ function PageHead({ eyebrow, title, sub, actions }) {
 
 /* ---------- sidebar ---------- */
 const NAV_ITEMS = [
-  ["dashboard", "dashboard"], ["proxy", "http"], ["cert", "cert"], ["settings", "settings"], ["backup", "backup"],
+  ["dashboard", "dashboard"], ["proxy", "http"], ["cert", "cert"], ["ddns", "ddns"], ["settings", "settings"], ["backup", "backup"],
 ];
 
 function Sidebar({ route, setRoute, t, lang, setLang, theme, setTheme, counts, user, onLogout }) {

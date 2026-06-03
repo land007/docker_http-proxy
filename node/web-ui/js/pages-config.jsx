@@ -20,17 +20,30 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
   const [up, setUp] = useStateC({ domain: "", certFile: null, keyFile: null });
   const providers = acme.providers || [];
   const firstProvider = providers[0] && providers[0].id || "";
-  const [form, setForm] = useStateC({ domain: "", provider: firstProvider, url: acme.defaultServer || "", credentials: {}, eabKid: "", eabHmacKey: "" });
+  const [form, setForm] = useStateC({ domain: "", provider: firstProvider, url: acme.defaultServer || "", credentials: {}, cfMethod: "", eabKid: "", eabHmacKey: "" });
+  const [advOpen, setAdvOpen] = useStateC(false);
+  const [issuing, setIssuing] = useStateC(false);
+  const [issueError, setIssueError] = useStateC("");
+  const [issueDone, setIssueDone] = useStateC("");
   const setF = (k, v) => setForm(s => ({ ...s, [k]: v }));
   React.useEffect(() => {
     setForm(s => ({ ...s, provider: s.provider || firstProvider, url: s.url || acme.defaultServer || "" }));
   }, [firstProvider, acme.defaultServer]);
   const provider = providers.find(p => p.id === form.provider);
+  const providerKey = provider ? `${provider.id}:${(provider.methods || []).map(m => m.id).join(",")}` : "";
+  React.useEffect(() => {
+    if (!provider) return;
+    const firstMethod = provider.methods && provider.methods[0] && provider.methods[0].id || "";
+    setForm(s => ({ ...s, cfMethod: firstMethod, credentials: {} }));
+  }, [providerKey]);
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short", day: "numeric" }) : t("common.none");
   const maybeT = (key) => {
     const value = t(key);
     return value === key ? "" : value;
   };
+  const methodLabel = (method) => maybeT("cert.method." + method.id) || method.label;
+  const activeMethod = provider && provider.methods && provider.methods.find(m => m.id === form.cfMethod);
+  const activeFields = provider && provider.methods ? (activeMethod || provider.methods[0]).fields : (provider && provider.fields || []);
   const credHint = (name) => {
     const text = maybeT("cert.credHint." + name);
     const link = CRED_LINKS[name];
@@ -44,16 +57,27 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
     setUp({ domain: "", certFile: null, keyFile: null }); setModalOpen(false);
   };
   const issue = async () => {
-    if (!form.domain.trim() || !form.provider) return;
-    await issueAcme({
-      domain: form.domain,
-      dnsProvider: form.provider,
-      server: form.url,
-      credentials: form.credentials,
-      eabKid: form.eabKid,
-      eabHmacKey: form.eabHmacKey,
-    });
-    setForm(s => ({ ...s, domain: "", credentials: {}, eabKid: "", eabHmacKey: "" }));
+    if (!form.domain.trim() || !form.provider || issuing) return;
+    const requestedDomain = form.domain.trim();
+    setIssuing(true);
+    setIssueError("");
+    setIssueDone("");
+    try {
+      await issueAcme({
+        domain: requestedDomain,
+        dnsProvider: form.provider,
+        server: form.url,
+        credentials: form.credentials,
+        eabKid: form.eabKid,
+        eabHmacKey: form.eabHmacKey,
+      });
+      setForm(s => ({ ...s, credentials: {}, eabKid: "", eabHmacKey: "" }));
+      setIssueDone(`${requestedDomain} ${t("cert.issueDone")}`);
+    } catch (error) {
+      setIssueError(error && error.message ? error.message : t("cert.issueFailed"));
+    } finally {
+      setIssuing(false);
+    }
   };
 
   return (
@@ -89,8 +113,16 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
             <Field label={t("cert.dnsProvider")}><select className="select" value={form.provider} onChange={(e) => setF("provider", e.target.value)}>{providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
             <Field label={t("cert.acmeUrl")}><input className="input mono" value={form.url} onChange={(e) => setF("url", e.target.value)} /></Field>
           </div>
+          {provider && provider.methods && <div className="field-row">
+            <Field label={t("cert.cfMethod")}>
+              <div className="seg seg-grow">{provider.methods.map(method => (
+                <button key={method.id} className={form.cfMethod === method.id ? "is-on" : ""}
+                  onClick={() => setForm(s => s.cfMethod === method.id ? s : ({ ...s, cfMethod: method.id, credentials: {} }))}>{methodLabel(method)}</button>
+              ))}</div>
+            </Field>
+          </div>}
           <div className="field-row">
-            {(provider && provider.fields || []).map(field => (
+            {activeFields.map(field => (
               <Field key={field.name} label={field.label} hint={credHint(field.name)}>
                 <input className="input mono" type={field.type || "text"} placeholder={field.label}
                   value={form.credentials[field.name] || ""}
@@ -98,15 +130,24 @@ function CertPage({ t, lang, certs, acme, modalOpen, setModalOpen, uploadCert, d
               </Field>
             ))}
           </div>
-          <div className="field-row">
-            <Field label={t("cert.eabKid")} hint={credHint("EAB_KID")}>
-              <input className="input mono" type="text" placeholder="EAB_KID" value={form.eabKid} onChange={(e) => setF("eabKid", e.target.value)} />
-            </Field>
-            <Field label={t("cert.eabHmacKey")} hint={credHint("EAB_HMAC_KEY")}>
-              <input className="input mono" type="password" placeholder="EAB_HMAC_KEY" value={form.eabHmacKey} onChange={(e) => setF("eabHmacKey", e.target.value)} />
-            </Field>
+          <button className="btn btn-soft btn-sm" onClick={() => setAdvOpen(v => !v)}>{advOpen ? "▾" : "▸"} {t("cert.advanced")}</button>
+          {advOpen && <div className="field-row" style={{ marginTop: 12 }}>
+              <Field label={t("cert.eabKid")} hint={credHint("EAB_KID")}>
+                <input className="input mono" type="text" placeholder="EAB_KID" value={form.eabKid} onChange={(e) => setF("eabKid", e.target.value)} />
+              </Field>
+              <Field label={t("cert.eabHmacKey")} hint={credHint("EAB_HMAC_KEY")}>
+                <input className="input mono" type="password" placeholder="EAB_HMAC_KEY" value={form.eabHmacKey} onChange={(e) => setF("eabHmacKey", e.target.value)} />
+              </Field>
+            </div>}
+          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <button className="btn btn-primary" disabled={!form.domain.trim() || !form.provider || issuing} onClick={issue}>
+            {issuing ? <span className="spinner" aria-hidden="true"></span> : <Icon name="shield" size={16} />}
+            {issuing ? t("cert.issuing") : t("cert.issue")}
+          </button>
+          {issuing && <span className="status-text"><Dot kind="warn" />{t("cert.issueWait")}</span>}
           </div>
-          <button className="btn btn-primary" disabled={!form.domain.trim() || !form.provider} onClick={issue}><Icon name="shield" size={16} />{t("cert.issue")}</button>
+          {issueDone && <div className="status-text" style={{ marginTop: 10, color: "var(--ok-text)" }}><Dot kind="ok" />{issueDone}</div>}
+          {issueError && <div className="status-text" style={{ marginTop: 10, color: "var(--err-text)" }}><Dot kind="err" />{issueError}</div>}
 
           <div style={{ marginTop: 20 }}>
             {acme.certs.length === 0

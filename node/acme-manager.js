@@ -46,22 +46,27 @@ const DNS_PROVIDERS = {
 			{ name: 'Ali_Secret', label: 'Ali_Secret', type: 'password' }
 		]
 	},
-	dns_cf_token: {
-		id: 'dns_cf_token',
+	dns_cf: {
+		id: 'dns_cf',
 		dns: 'dns_cf',
-		name: 'Cloudflare (API Token)',
-		fields: [
-			{ name: 'CF_Token', label: 'CF_Token', type: 'password' },
-			{ name: 'CF_Account_ID', label: 'CF_Account_ID', type: 'text', optional: true }
-		]
-	},
-	dns_cf_key: {
-		id: 'dns_cf_key',
-		dns: 'dns_cf',
-		name: 'Cloudflare (Global API Key)',
-		fields: [
-			{ name: 'CF_Key', label: 'CF_Key', type: 'password' },
-			{ name: 'CF_Email', label: 'CF_Email', type: 'email' }
+		name: 'Cloudflare',
+		methods: [
+			{
+				id: 'token',
+				label: 'API Token',
+				fields: [
+					{ name: 'CF_Token', label: 'CF_Token', type: 'password' },
+					{ name: 'CF_Account_ID', label: 'CF_Account_ID', type: 'text', optional: true }
+				]
+			},
+			{
+				id: 'key',
+				label: 'Global API Key',
+				fields: [
+					{ name: 'CF_Key', label: 'CF_Key', type: 'password' },
+					{ name: 'CF_Email', label: 'CF_Email', type: 'email' }
+				]
+			}
 		]
 	}
 };
@@ -186,13 +191,15 @@ async function issue(domain, options = {}) {
 		throw new Error('Unsupported DNS provider');
 	}
 
-	const requiredMissing = provider.fields
-		.filter(field => !field.optional)
-		.filter(field => !options.credentials || !options.credentials[field.name])
-		.map(field => field.name);
+	const groups = provider.methods ? provider.methods.map(method => method.fields) : [provider.fields];
+	const hasRequiredCredentials = groups.some(fields =>
+		fields
+			.filter(field => !field.optional)
+			.every(field => options.credentials && options.credentials[field.name])
+	);
 
-	if (requiredMissing.length > 0) {
-		throw new Error(`Missing DNS credentials: ${requiredMissing.join(', ')}`);
+	if (!hasRequiredCredentials) {
+		throw new Error('Missing DNS credentials');
 	}
 
 	const dnsPlugin = provider.dns || provider.id;

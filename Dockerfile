@@ -17,6 +17,7 @@ ADD node/auth-manager.js /node_/auth-manager.js
 ADD node/acme-manager.js /node_/acme-manager.js
 ADD node/proxy-stats.js /node_/proxy-stats.js
 ADD node/web-ui /node_/web-ui
+ADD ddns /node_/ddns
 
 ENV username="land007" \
 	password="fcea920f7412b5da7be0cf42b8c93759" \
@@ -53,7 +54,12 @@ RUN npm install -g supervisor
 # Create simplified start script
 RUN echo '#!/bin/bash\n\
 export NODE_PATH=/usr/local/lib/node_modules\n\
+while true; do node /node_/ddns/ddns-server.js >> /tmp/ddns-server.log 2>&1; sleep 2; done &\n\
+export ADMIN_API_PORT=${ADMIN_API_PORT:-18444}\n\
+export PUBLIC_ADMIN_PORT=${PUBLIC_ADMIN_PORT:-${ADMIN_PORT:-8444}}\n\
+export ADMIN_PORT=$ADMIN_API_PORT\n\
 nohup node /node_/admin-api.js > /tmp/admin-api.log 2>&1 &\n\
+while true; do node /node_/ddns/admin-splitter.js >> /tmp/admin-splitter.log 2>&1; sleep 2; done &\n\
 supervisor -w /node_/ -i node_modules /node_/server.js\n\
 ' > /node_/start-simple.sh && chmod +x /node_/start-simple.sh
 

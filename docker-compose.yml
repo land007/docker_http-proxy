@@ -17,12 +17,14 @@ services:
         max-file: "3"
     volumes:
       - proxy_backups:/node_/backups
+      - ./ddns-config.json:/node_/ddns-config.json
     environment:
       - "DOMAIN_NAME=www.gjxt.xyz"
       - "username=gjxt"
       - "password="
       - "ADMIN_PORT=8444"
       - "ADMIN_HTTP_MODE=true"
+      - "DDNS_INTERVAL=300"
       - "http_proxy_domains=www.gjxt.xyz"
       - "http_proxy_protocols=https:"
       - "http_proxy_paths=/"

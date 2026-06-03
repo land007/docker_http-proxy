@@ -1,4 +1,4 @@
-/* global React, ReactDOM, tFor, Sidebar, DashboardPage, ProxyPage, CertPage, SettingsPage, BackupPage, Icon */
+/* global React, ReactDOM, tFor, Sidebar, DashboardPage, ProxyPage, CertPage, DdnsPage, SettingsPage, BackupPage, Icon */
 
 const { useCallback, useEffect, useMemo, useState } = React;
 
@@ -120,6 +120,9 @@ function App() {
   const [ws, setWs] = useState([]);
   const [certs, setCerts] = useState([]);
   const [acme, setAcme] = useState({ available: false, providers: [], defaultServer: "", certs: [] });
+  const [ddns, setDdns] = useState({ version: "1.0", interval: 300, entries: [] });
+  const [ddnsProviders, setDdnsProviders] = useState([]);
+  const [ddnsStatus, setDdnsStatus] = useState({ ip4: "", ip6: "", entries: [] });
   const [settings, setSettings] = useState({ maxSessions: 0, defaultUser: "", defaultPass: "", enableAuth: false });
   const [backups, setBackups] = useState([]);
 
@@ -156,6 +159,16 @@ function App() {
     const acmeCerts = await api.get("/api/acme/certs");
     setAcme({ available: true, providers: info.providers || [], defaultServer: info.defaultServer || "", certs: acmeCerts.map(normalizeCert) });
   }, []);
+  const loadDdns = useCallback(async () => {
+    const [providers, config, status] = await Promise.all([
+      api.get("/api/ddns/providers"),
+      api.get("/api/ddns/config"),
+      api.get("/api/ddns/status"),
+    ]);
+    setDdnsProviders(providers || []);
+    setDdns(config || { version: "1.0", interval: 300, entries: [] });
+    setDdnsStatus(status || { ip4: "", ip6: "", entries: [] });
+  }, []);
   const loadSettings = useCallback(async () => {
     const data = await api.get("/api/settings");
     setSettings({
@@ -170,8 +183,8 @@ function App() {
   }, []);
 
   const reloadAll = useCallback(async () => {
-    await Promise.all([loadStatus(), loadHttp(), loadWs(), loadCerts(), loadAcme(), loadSettings(), loadBackups()]);
-  }, [loadStatus, loadHttp, loadWs, loadCerts, loadAcme, loadSettings, loadBackups]);
+    await Promise.all([loadStatus(), loadHttp(), loadWs(), loadCerts(), loadAcme(), loadDdns(), loadSettings(), loadBackups()]);
+  }, [loadStatus, loadHttp, loadWs, loadCerts, loadAcme, loadDdns, loadSettings, loadBackups]);
 
   useEffect(() => {
     (async () => {
@@ -338,6 +351,33 @@ function App() {
     toast(t("toast.saved"));
   };
 
+  const saveDdns = async (next, original) => {
+    const payload = {
+      enabled: next.enabled !== false,
+      provider: next.provider,
+      domain: next.domain,
+      recordTypes: next.recordTypes || ["A"],
+      ttl: Number(next.ttl || 600),
+      credentials: next.credentials || {},
+    };
+    if (original && original.id) await api.put(`/api/ddns/config/${encodeURIComponent(original.id)}`, payload);
+    else await api.post("/api/ddns/config", payload);
+    await loadDdns();
+    toast(t("toast.saved"));
+  };
+
+  const deleteDdns = async (entry) => {
+    await api.delete(`/api/ddns/config/${encodeURIComponent(entry.id)}`);
+    await loadDdns();
+    toast(t("toast.deleted"));
+  };
+
+  const syncDdns = async (entry) => {
+    await api.post(`/api/ddns/${encodeURIComponent(entry.id)}/sync`);
+    await loadDdns();
+    toast(t("ddns.synced"));
+  };
+
   const saveSettings = async (next) => {
     await api.put("/api/settings", {
       maxSession: Number(next.maxSessions || 0),
@@ -379,8 +419,9 @@ function App() {
     dashboard: 0,
     proxy: proxyEntries.length,
     cert: certs.length,
+    ddns: ddns.entries.length,
     backup: backups.length,
-  }), [proxyEntries.length, certs.length, backups.length]);
+  }), [proxyEntries.length, certs.length, ddns.entries.length, backups.length]);
 
   const go = (r) => { setModal(null); setRoute(r); };
   const openOn = (r) => { setRoute(r); setModal(r); };
@@ -397,6 +438,8 @@ function App() {
           save={saveProxyEntry} remove={deleteProxyEntry} toast={toast} />}
         {route === "cert" && <CertPage t={t} lang={lang} certs={certs} acme={acme} modalOpen={mOpen("cert")} setModalOpen={setMOpen("cert")}
           uploadCert={uploadCert} deleteCert={deleteCert} issueAcme={issueAcme} renewAcme={renewAcme} toast={toast} />}
+        {route === "ddns" && <DdnsPage t={t} lang={lang} config={ddns} status={ddnsStatus} providers={ddnsProviders} modalOpen={mOpen("ddns")} setModalOpen={setMOpen("ddns")}
+          save={saveDdns} remove={deleteDdns} sync={syncDdns} toast={toast} />}
         {route === "settings" && <SettingsPage t={t} settings={settings} saveSettings={saveSettings} toast={toast} />}
         {route === "backup" && <BackupPage t={t} lang={lang} backups={backups} createBackup={createBackup} restoreBackup={restoreBackup} deleteBackup={deleteBackup} toast={toast} />}
       </main>
