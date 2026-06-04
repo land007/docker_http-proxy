@@ -30,6 +30,7 @@ var http_proxy_paths = [];
 var http_proxy_hosts = [];
 var http_proxy_ports = [];
 var http_proxy_pretends = [];
+var http_proxy_redirects = [];
 var http_proxy_users = [];
 
 var ws_proxy_protocols = [];
@@ -72,6 +73,7 @@ function updateConfiguration() {
 	http_proxy_hosts = httpConfig.hosts;
 	http_proxy_ports = httpConfig.ports;
 	http_proxy_pretends = httpConfig.pretends;
+	http_proxy_redirects = httpConfig.redirects || [];
 	http_proxy_users = httpConfig.users;
 
 	// Update WebSocket proxy rules
@@ -273,6 +275,23 @@ const send401 = function(res) {
 	res.end('<html><body>Need some creds son</body></html>');
 };
 
+const wantsHttpsRedirect = function(req, index) {
+	return !req.socket.encrypted && http_proxy_redirects[index] === 'true';
+};
+
+const buildHttpsRedirectUrl = function(req) {
+	const host = String(req.headers.host || '').replace(/:80$/, '');
+	return `https://${host}${req.url || '/'}`;
+};
+
+const sendHttpsRedirect = function(req, res) {
+	res.writeHead(301, {
+		'Location': buildHttpsRedirectUrl(req),
+		'Content-Type': 'text/plain'
+	});
+	res.end('Redirecting to HTTPS');
+};
+
 const buildRuleStatsMeta = function(kind, index) {
 	const protocols = kind === 'ws' ? ws_proxy_protocols : http_proxy_protocols;
 	const domains = kind === 'ws' ? ws_proxy_domains : http_proxy_domains;
@@ -415,6 +434,10 @@ const _requestListener = async function(req, res) {
 			};
 			res.once('finish', finishStats);
 			res.once('close', finishStats);
+			if (wantsHttpsRedirect(req, h)) {
+				sendHttpsRedirect(req, res);
+				return;
+			}
 			// 检查登录信息
 			if(!check(req, http_proxy_users[h], _token)) {
 				send401(res);

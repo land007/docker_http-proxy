@@ -37,6 +37,7 @@ const CONFIG_SCHEMA = {
 			targetHost: { type: 'string', required: true, minLength: 1 },
 			targetPort: { type: 'number', required: true, min: 1, max: 65535 },
 			pretendMode: { type: 'boolean', required: true },
+			redirectToHttps: { type: 'boolean', required: false },
 			priority: { type: 'number', required: true, min: 1 },
 			users: { type: 'object', required: false }
 		}
@@ -219,6 +220,10 @@ class ConfigValidator {
 
 			if (typeof rule.pretendMode !== 'boolean') {
 				errors.push(`httpProxyRules[${index}].pretendMode must be a boolean`);
+			}
+
+			if (rule.redirectToHttps !== undefined && typeof rule.redirectToHttps !== 'boolean') {
+				errors.push(`httpProxyRules[${index}].redirectToHttps must be a boolean`);
 			}
 
 			if (!rule.priority || typeof rule.priority !== 'number' || rule.priority < 1) {

@@ -205,6 +205,7 @@ class ProxyConfigLoader {
 				hosts: [],
 				ports: [],
 				pretends: [],
+				redirects: [],
 				users: []
 			};
 		}
@@ -220,6 +221,7 @@ class ProxyConfigLoader {
 			hosts: rules.map(r => r.targetHost),
 			ports: rules.map(r => r.targetPort.toString()),
 			pretends: rules.map(r => r.pretendMode.toString()),
+			redirects: rules.map(r => (!!r.redirectToHttps).toString()),
 			users: rules.map(r => r.users || {})
 		};
 	}
@@ -304,6 +306,7 @@ class ProxyConfigLoader {
 		const http_proxy_hosts = this.parseEnvList('http_proxy_hosts');
 		const http_proxy_ports = this.parseEnvList('http_proxy_ports');
 		const http_proxy_pretends = this.parseEnvList('http_proxy_pretends');
+		const http_proxy_redirects = this.parseEnvList('http_proxy_redirects');
 
 		const ws_proxy_protocols = this.parseEnvList('ws_proxy_protocols');
 		const ws_proxy_domains = this.parseEnvList('ws_proxy_domains');
@@ -327,6 +330,7 @@ class ProxyConfigLoader {
 					targetHost: http_proxy_hosts[i] || 'localhost',
 					targetPort: parseInt(http_proxy_ports[i]) || 80,
 					pretendMode: http_proxy_pretends[i] === 'true',
+					redirectToHttps: http_proxy_redirects[i] === 'true',
 					priority: i + 1,
 					users: {}
 				});

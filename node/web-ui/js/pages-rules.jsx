@@ -211,6 +211,9 @@ function RuleModal({ t, mode, kind, initial, onClose, onSave }) {
       <label className="check" style={{ marginBottom: 8 }}>
         <input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /><span>{t("common.enabled")}</span>
       </label>
+      {kind !== "ws" && <label className="check" style={{ marginBottom: 8 }}>
+        <input type="checkbox" checked={!!f.redirectToHttps} onChange={(e) => set("redirectToHttps", e.target.checked)} /><span>{t("proxy.redirectToHttps")}</span>
+      </label>}
     </Modal>
   );
 }
@@ -280,7 +283,7 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
 function defaultProxyForm() {
   return {
     enabled: true, domain: "", path: "/", target: "", httpEnabled: true, httpProtocol: "HTTPS",
-    wsEnabled: false, wsProtocol: "WSS", pretend: false, priority: 1, users: []
+    redirectToHttps: false, wsEnabled: false, wsProtocol: "WSS", pretend: false, priority: 1, users: []
   };
 }
 
@@ -331,6 +334,10 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
           </select>
         </div>
       </div>
+      <label className="check" style={{ marginBottom: 14 }}>
+        <input type="checkbox" checked={!!f.redirectToHttps} onChange={(e) => set("redirectToHttps", e.target.checked)} disabled={!f.httpEnabled} />
+        <span>{t("proxy.redirectToHttps")}</span>
+      </label>
       <div className="field-row">
         <Field label={t("common.priority")}>
           <input className="input mono" type="number" min="1" value={f.priority} onChange={(e) => set("priority", +e.target.value)} />
@@ -411,6 +418,7 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
                   <td>
                     <div className="flex gap-10">
                       {entry.httpEnabled && <Badge kind={entry.httpProtocol === "HTTPS" ? "accent" : "neutral"} className="badge-proto">{entry.httpProtocol}</Badge>}
+                      {entry.httpEnabled && entry.redirectToHttps && <Badge kind="accent" className="badge-proto">{t("proxy.redirectBadge")}</Badge>}
                       {entry.wsEnabled && <Badge kind={entry.wsProtocol === "WSS" ? "accent" : "neutral"} className="badge-proto">{entry.wsProtocol}</Badge>}
                     </div>
                   </td>

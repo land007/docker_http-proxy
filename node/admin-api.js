@@ -296,6 +296,7 @@ app.post('/api/http-rules', requireAuth, [
 	body('targetHost').isString().notEmpty(),
 	body('targetPort').isInt({ min: 1, max: 65535 }),
 	body('pretendMode').isBoolean(),
+	body('redirectToHttps').optional().isBoolean(),
 	body('priority').isInt({ min: 1 }),
 	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {
@@ -334,6 +335,7 @@ app.put('/api/http-rules/:id', requireAuth, [
 	body('targetHost').optional().isString(),
 	body('targetPort').optional().isInt({ min: 1, max: 65535 }),
 	body('pretendMode').optional().isBoolean(),
+	body('redirectToHttps').optional().isBoolean(),
 	body('priority').optional().isInt({ min: 1 }),
 	body('users').optional().isArray()
 ], handleValidationErrors, async (req, res) => {

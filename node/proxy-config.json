@@ -19,6 +19,7 @@
       "targetHost": "im1c5366d.7x24cc.com",
       "targetPort": 443,
       "pretendMode": true,
+      "redirectToHttps": false,
       "priority": 1
     }
   ],

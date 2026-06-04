@@ -13,6 +13,7 @@ A modern, manageable HTTP/HTTPS reverse proxy with web-based configuration inter
 - **Backup/Restore** - Automatic configuration backups with manual restore capability
 - **WebSocket Support** - Full WebSocket proxying with upgrade handling
 - **Pretend Mode** - Host header rewriting for seamless proxying
+- **HTTP to HTTPS Redirects** - Optional per-HTTP-rule redirect from plain HTTP to HTTPS
 - **SNI Support** - Multi-domain SSL certificate handling
 
 ## Quick Start
@@ -56,6 +57,10 @@ On first startup, if `proxy-config.json` doesn't exist, the system will automati
 5. **Backups** - Create, restore, and manage configuration backups
 
 ## API Endpoints
+
+### HTTP to HTTPS Redirects
+
+Each HTTP proxy rule supports `redirectToHttps: true`. When enabled, requests that arrive on the plain HTTP listener are answered with a `301` redirect to the same host and URL using `https://`; requests that already arrive over HTTPS continue to proxy normally. For first-start environment migration, set `http_proxy_redirects=true,false,...` with the same ordering as `http_proxy_paths`.
 
 ### Authentication
 - `POST /api/auth/login` - Admin login

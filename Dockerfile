@@ -31,6 +31,7 @@ ENV username="land007" \
 	http_proxy_hosts="192.168.1.218,192.168.1.218" \
 	http_proxy_ports="8080,3000" \
 	http_proxy_pretends="true,true" \
+	http_proxy_redirects="false,false" \
 	ws_proxy_protocols="ws:,wss:" \
 	ws_proxy_domains="192.168.1.1:1080,192.168.1.1:1443" \
 	ws_proxy_paths="/api/,/" \

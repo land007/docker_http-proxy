@@ -57,6 +57,7 @@ function normalizeRule(rule, kind) {
     target: `${rule.targetHost || ""}:${rule.targetPort || ""}`,
     protocol: String(rule.protocol || (kind === "ws" ? "ws:" : "http:")).replace(":", "").toUpperCase(),
     pretend: !!rule.pretendMode,
+    redirectToHttps: kind === "http" ? !!rule.redirectToHttps : false,
     priority: Number(rule.priority || 1),
     users,
   };
@@ -73,6 +74,7 @@ function denormalizeRule(rule, kind) {
     targetPort: target.targetPort,
     protocol: protocol.endsWith(":") ? protocol : `${protocol}:`,
     pretendMode: !!rule.pretend,
+    redirectToHttps: kind === "http" ? !!rule.redirectToHttps : undefined,
     priority: Number(rule.priority || 1),
     users: (rule.users || []).map(u => ({ username: u.username || "", password: u.password || "", hash: u.hash || "" })).filter(u => u.username),
   };
@@ -248,6 +250,7 @@ function App() {
           target: rule.target || "",
           httpEnabled: false,
           httpProtocol: "HTTPS",
+          redirectToHttps: false,
           wsEnabled: false,
           wsProtocol: "WSS",
           pretend: !!rule.pretend,
@@ -265,6 +268,7 @@ function App() {
       const entry = ensure(rule);
       entry.httpEnabled = true;
       entry.httpProtocol = rule.protocol || "HTTP";
+      entry.redirectToHttps = !!rule.redirectToHttps;
       entry.enabled = entry._seen ? entry.enabled || !!rule.enabled : !!rule.enabled;
       entry._seen = true;
       entry.pretend = !!rule.pretend;
@@ -295,6 +299,7 @@ function App() {
       path: next.path || "/",
       target: next.target || "",
       pretend: !!next.pretend,
+      redirectToHttps: !!next.redirectToHttps,
       priority: Number(next.priority || 1),
       users: (next.users || []).filter(u => u.username && String(u.username).trim()),
     };

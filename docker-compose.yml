@@ -28,6 +28,7 @@ services:
       - "http_proxy_hosts=im1c5366d.7x24cc.com"
       - "http_proxy_ports=443"
       - "http_proxy_pretends=true"
+      - "http_proxy_redirects=false"
       - "ws_proxy_domains=www.gjxt.xyz"
       - "ws_proxy_protocols=wss:"
       - "ws_proxy_paths=/"
