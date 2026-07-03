@@ -33,6 +33,7 @@ const CONFIG_SCHEMA = {
 			enabled: { type: 'boolean', required: true },
 			protocol: { type: 'string', required: true, enum: ['http:', 'https:'] },
 			domain: { type: 'string', required: false },
+			description: { type: 'string', required: false },
 			path: { type: 'string', required: true, minLength: 1 },
 			targetHost: { type: 'string', required: true, minLength: 1 },
 			targetPort: { type: 'number', required: true, min: 1, max: 65535 },
@@ -50,6 +51,7 @@ const CONFIG_SCHEMA = {
 			enabled: { type: 'boolean', required: true },
 			protocol: { type: 'string', required: true, enum: ['ws:', 'wss:'] },
 			domain: { type: 'string', required: false },
+			description: { type: 'string', required: false },
 			path: { type: 'string', required: true, minLength: 1 },
 			targetHost: { type: 'string', required: true, minLength: 1 },
 			targetPort: { type: 'number', required: true, min: 1, max: 65535 },
@@ -206,6 +208,10 @@ class ConfigValidator {
 				errors.push(`httpProxyRules[${index}].domain must be a string`);
 			}
 
+			if (rule.description !== undefined && typeof rule.description !== 'string') {
+				errors.push(`httpProxyRules[${index}].description must be a string`);
+			}
+
 			if (!rule.path || typeof rule.path !== 'string' || rule.path.length === 0) {
 				errors.push(`httpProxyRules[${index}].path must be a non-empty string`);
 			}
@@ -268,6 +274,10 @@ class ConfigValidator {
 
 			if (rule.domain !== undefined && typeof rule.domain !== 'string') {
 				errors.push(`wsProxyRules[${index}].domain must be a string`);
+			}
+
+			if (rule.description !== undefined && typeof rule.description !== 'string') {
+				errors.push(`wsProxyRules[${index}].description must be a string`);
 			}
 
 			if (!rule.path || typeof rule.path !== 'string' || rule.path.length === 0) {

@@ -312,6 +312,40 @@ const buildRuleStatsMeta = function(kind, index) {
 	};
 };
 
+const buildProxyTarget = function(protocol, host, port) {
+	const targetProtocol = protocol || 'http:';
+	const targetPort = String(port || '');
+	const isDefaultPort = (targetProtocol === 'http:' || targetProtocol === 'ws:') && targetPort === '80'
+		|| (targetProtocol === 'https:' || targetProtocol === 'wss:') && targetPort === '443';
+	return `${targetProtocol}//${host}${isDefaultPort || !targetPort ? '' : ':' + targetPort}`;
+};
+
+const createHttpProxy = function(protocol, host, port, pretend) {
+	const options = {
+		target: buildProxyTarget(protocol, host, port),
+		secure: false,
+		ws: false
+	};
+	if (pretend) {
+		options.autoRewrite = true;
+		options.changeOrigin = true;
+	}
+	return httpProxy.createProxyServer(options);
+};
+
+const createWsProxy = function(protocol, host, port, pretend) {
+	const options = {
+		target: buildProxyTarget(protocol, host, port),
+		secure: false,
+		ws: true
+	};
+	if (pretend) {
+		options.autoRewrite = true;
+		options.changeOrigin = true;
+	}
+	return httpProxy.createProxyServer(options);
+};
+
 const installResponseByteCounter = function(res, sample) {
 	const originalWrite = res.write;
 	const originalEnd = res.end;
@@ -445,18 +479,12 @@ const _requestListener = async function(req, res) {
 			}
 			// 都检查通过了可以代理
 			if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
-				let proxy = httpProxy.createProxyServer({
-	                autoRewrite: true,
-	                hostRewrite: true,
-	                changeOrigin: true,
-					target: {
-						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h],
-						protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
-					},
-					secure: false,
-					ws: false
-				});
+				let proxy = createHttpProxy(
+					http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:",
+					http_proxy_hosts[h],
+					http_proxy_ports[h],
+					true
+				);
 				proxy.on('error', function(error, req, res) {
 					console.error('⛔ HTTP proxy error:', error.message);
 					if (res && !res.headersSent) {
@@ -471,15 +499,12 @@ const _requestListener = async function(req, res) {
 //				});
 				proxy.web(req, res);
 			} else {
-				let proxy = httpProxy.createProxyServer({
-					target: {
-						host: http_proxy_hosts[h],
-						port: http_proxy_ports[h],
-						protocol: http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:"
-					},
-					secure: false,
-					ws: false
-				});
+				let proxy = createHttpProxy(
+					http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:",
+					http_proxy_hosts[h],
+					http_proxy_ports[h],
+					false
+				);
 				proxy.on('error', function(error, req, res) {
 					console.error('⛔ HTTP proxy error:', error.message);
 					if (res && !res.headersSent) {
@@ -578,33 +603,24 @@ const _upgrade = function(req, socket, head) {
 			socket.once('close', () => closeStats(false));
 			socket.once('error', () => closeStats(true));
 			if (ws_proxy_pretends[w] && ws_proxy_pretends[w] == 'true') {
-				let proxy = new httpProxy.createProxyServer({
-	                autoRewrite: true,
-	                hostRewrite: true,
-	                changeOrigin: true,
-					target: {
-						host: ws_proxy_hosts[w],
-						port: ws_proxy_ports[w],
-						protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
-					},
-					secure: false,
-					ws: true
-				});
+				let proxy = createWsProxy(
+					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
+					ws_proxy_hosts[w],
+					ws_proxy_ports[w],
+					true
+				);
 				proxy.on('error', function(error) {
 					console.error('⛔ WS proxy error:', error.message);
 					closeStats(true);
 				});
 				proxy.ws(req, socket, head);
 			} else {
-				let proxy = new httpProxy.createProxyServer({
-					target: {
-						host: ws_proxy_hosts[w],
-						port: ws_proxy_ports[w],
-						protocol: ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:"
-					},
-					secure: false,
-					ws: true
-				});
+				let proxy = createWsProxy(
+					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
+					ws_proxy_hosts[w],
+					ws_proxy_ports[w],
+					false
+				);
 				proxy.on('error', function(error) {
 					console.error('⛔ WS proxy error:', error.message);
 					closeStats(true);

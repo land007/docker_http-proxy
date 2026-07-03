@@ -53,6 +53,7 @@ function normalizeRule(rule, kind) {
     id: rule.id,
     enabled: !!rule.enabled,
     domain: rule.domain || "",
+    description: rule.description || "",
     path: rule.path || "/",
     target: `${rule.targetHost || ""}:${rule.targetPort || ""}`,
     protocol: String(rule.protocol || (kind === "ws" ? "ws:" : "http:")).replace(":", "").toUpperCase(),
@@ -69,6 +70,7 @@ function denormalizeRule(rule, kind) {
   return {
     enabled: !!rule.enabled,
     domain: rule.domain || "",
+    description: rule.description || "",
     path: rule.path || "/",
     targetHost: target.targetHost,
     targetPort: target.targetPort,
@@ -246,6 +248,7 @@ function App() {
           id: key,
           enabled: !!rule.enabled,
           domain: rule.domain || "",
+          description: rule.description || "",
           path: rule.path || "/",
           target: rule.target || "",
           httpEnabled: false,
@@ -268,6 +271,7 @@ function App() {
       const entry = ensure(rule);
       entry.httpEnabled = true;
       entry.httpProtocol = rule.protocol || "HTTP";
+      entry.description = rule.description || entry.description || "";
       entry.redirectToHttps = !!rule.redirectToHttps;
       entry.enabled = entry._seen ? entry.enabled || !!rule.enabled : !!rule.enabled;
       entry._seen = true;
@@ -281,6 +285,7 @@ function App() {
       const entry = ensure(rule);
       entry.wsEnabled = true;
       entry.wsProtocol = rule.protocol || "WS";
+      entry.description = entry.description || rule.description || "";
       entry.enabled = entry._seen ? entry.enabled || !!rule.enabled : !!rule.enabled;
       entry._seen = true;
       entry.pretend = !!rule.pretend;
@@ -296,6 +301,7 @@ function App() {
     const shared = {
       enabled: !!next.enabled,
       domain: next.domain || "",
+      description: next.description || "",
       path: next.path || "/",
       target: next.target || "",
       pretend: !!next.pretend,

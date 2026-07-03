@@ -173,7 +173,7 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openProxy, openCe
 /* ===================== shared rule modal ===================== */
 function RuleModal({ t, mode, kind, initial, onClose, onSave }) {
   const protos = kind === "ws" ? ["WS", "WSS"] : ["HTTP", "HTTPS"];
-  const [f, setF] = useState(initial || { enabled: true, domain: "", path: "/", target: "", protocol: protos[1], pretend: false, priority: 1 });
+  const [f, setF] = useState(initial || { enabled: true, domain: "", description: "", path: "/", target: "", protocol: protos[1], pretend: false, priority: 1 });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const valid = f.domain.trim() && f.target.trim();
   const tx = kind === "ws" ? "ws" : "http";
@@ -186,6 +186,9 @@ function RuleModal({ t, mode, kind, initial, onClose, onSave }) {
       </>}>
       <Field label={t("common.domain")} req>
         <input className="input mono" placeholder="proxy.example.com" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
+      </Field>
+      <Field label={t("common.description")}>
+        <input className="input" placeholder={t("proxy.descriptionPlaceholder")} value={f.description || ""} onChange={(e) => set("description", e.target.value)} />
       </Field>
       <div className="field-row">
         <Field label={t("common.path")}>
@@ -246,7 +249,7 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
               action={<button className="btn btn-primary" onClick={openNew}><Icon name="plus" size={16} />{t(tx + ".addRule")}</button>} />
           : <div className="tablewrap"><table className="table">
             <thead><tr>
-              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.path")}</th>
+              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.description")}</th><th>{t("common.path")}</th>
               <th>{t("common.target")}</th><th>{t("common.protocol")}</th><th>{t("http.pretend")}</th>
               <th>{t("common.priority")}</th><th className="td-right">{t("common.actions")}</th>
             </tr></thead>
@@ -255,6 +258,7 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
                 <tr key={r.id}>
                   <td><Toggle checked={r.enabled} onChange={(v) => toggle(r, v)} /></td>
                   <td className="mono cell-host">{r.domain}</td>
+                  <td className="cell-dim">{r.description || "—"}</td>
                   <td className="mono cell-dim">{r.path || "/"}</td>
                   <td className="mono">{r.target}</td>
                   <td><Badge kind={String(r.protocol).includes("S") ? "accent" : "neutral"} className="badge-proto">{r.protocol}</Badge></td>
@@ -282,7 +286,7 @@ function RulesPage({ t, kind, rules, setRules, modalOpen, setModalOpen, toast })
 
 function defaultProxyForm() {
   return {
-    enabled: true, domain: "", path: "/", target: "", httpEnabled: true, httpProtocol: "HTTPS",
+    enabled: true, domain: "", description: "", path: "/", target: "", httpEnabled: true, httpProtocol: "HTTPS",
     redirectToHttps: false, wsEnabled: false, wsProtocol: "WSS", pretend: false, priority: 1, users: []
   };
 }
@@ -305,6 +309,9 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
       </>}>
       <Field label={t("common.domain")} req>
         <input className="input mono" placeholder="proxy.example.com:8443" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
+      </Field>
+      <Field label={t("common.description")}>
+        <input className="input" placeholder={t("proxy.descriptionPlaceholder")} value={f.description || ""} onChange={(e) => set("description", e.target.value)} />
       </Field>
       <div className="field-row">
         <Field label={t("common.path")}>
@@ -404,7 +411,7 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
               action={<button className="btn btn-primary" onClick={openNew}><Icon name="plus" size={16} />{t("proxy.add")}</button>} />
           : <div className="tablewrap"><table className="table">
             <thead><tr>
-              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.path")}</th>
+              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.description")}</th><th>{t("common.path")}</th>
               <th>{t("common.target")}</th><th>{t("proxy.protocols")}</th><th>{t("proxy.accounts")}</th>
               <th>{t("common.priority")}</th><th className="td-right">{t("common.actions")}</th>
             </tr></thead>
@@ -413,6 +420,7 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
                 <tr key={entry.id}>
                   <td>{entry.enabled ? <Badge kind="ok">{t("common.enabled")}</Badge> : <Badge kind="neutral">{t("common.disabled")}</Badge>}</td>
                   <td className="mono cell-host">{entry.domain}</td>
+                  <td className="cell-dim">{entry.description || "—"}</td>
                   <td className="mono cell-dim">{entry.path || "/"}</td>
                   <td className="mono">{entry.target}</td>
                   <td>

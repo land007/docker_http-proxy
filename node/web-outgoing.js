@@ -51,8 +51,9 @@ module.exports = { // <--
     if ((options.hostRewrite || options.autoRewrite || options.protocolRewrite)
         && proxyRes.headers['location']
         && redirectRegex.test(proxyRes.statusCode)) {
-      //var target = url.parse(options.target);
-var target = options.target;
+      var target = typeof options.target === 'string'
+        ? url.parse(options.target)
+        : options.target;
       var u = url.parse(proxyRes.headers['location']);
 
       // make sure the redirected host matches the target host before rewriting

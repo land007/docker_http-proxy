@@ -8,7 +8,7 @@ const I18N = {
     common: {
       add: "添加", save: "保存", cancel: "取消", delete: "删除", edit: "编辑", restore: "恢复",
       enabled: "已启用", disabled: "已停用", yes: "是", no: "否", confirm: "确认", upload: "上传",
-      domain: "域名", path: "路径", target: "目标", protocol: "协议", priority: "优先级", actions: "操作",
+      domain: "域名", description: "说明", path: "路径", target: "目标", protocol: "协议", priority: "优先级", actions: "操作",
       online: "在线", offline: "离线", all_online: "全部在线", search: "搜索…", none: "无",
     },
     dash: {
@@ -28,6 +28,7 @@ const I18N = {
     proxy: { eyebrow: "路由", title: "代理", sub: "按域名、路径与上游目标统一管理 HTTP / WebSocket 与客户端鉴权。", add: "添加代理",
       edit: "编辑代理", new: "新建代理", protocols: "协议", accounts: "账号数", auth: "代理鉴权账号",
       addAccount: "添加账号", username: "用户名", password: "密码", passwordKeep: "留空表示不修改密码",
+      descriptionPlaceholder: "例如：OpenWrt 防火墙 / 内网面板 / 某项目服务",
       enableHttp: "启用 HTTP/HTTPS", enableWs: "启用 WS/WSS", redirectToHttps: "HTTP 自动升级 HTTPS", redirectBadge: "跳 HTTPS", empty: "暂无代理",
       emptySub: "添加一条代理，将域名路径转发到同一个上游目标。", delTitle: "删除此代理？",
       delDesc: "此操作会同时删除该代理的 HTTP 与 WebSocket 规则。", saved: "代理已保存" },
@@ -98,7 +99,7 @@ const I18N = {
     common: {
       add: "Add", save: "Save", cancel: "Cancel", delete: "Delete", edit: "Edit", restore: "Restore",
       enabled: "Enabled", disabled: "Disabled", yes: "Yes", no: "No", confirm: "Confirm", upload: "Upload",
-      domain: "Domain", path: "Path", target: "Target", protocol: "Protocol", priority: "Priority", actions: "Actions",
+      domain: "Domain", description: "Description", path: "Path", target: "Target", protocol: "Protocol", priority: "Priority", actions: "Actions",
       online: "Online", offline: "Offline", all_online: "All online", search: "Search…", none: "None",
     },
     dash: {
@@ -118,6 +119,7 @@ const I18N = {
     proxy: { eyebrow: "Routing", title: "Proxy", sub: "Manage HTTP / WebSocket forwarding and client auth by domain, path, and upstream target.", add: "Add proxy",
       edit: "Edit proxy", new: "New proxy", protocols: "Protocols", accounts: "Accounts", auth: "Proxy auth accounts",
       addAccount: "Add account", username: "Username", password: "Password", passwordKeep: "Leave blank to keep password",
+      descriptionPlaceholder: "e.g. OpenWrt firewall / internal admin / project service",
       enableHttp: "Enable HTTP/HTTPS", enableWs: "Enable WS/WSS", redirectToHttps: "Redirect HTTP to HTTPS", redirectBadge: "HTTPS redirect", empty: "No proxies yet",
       emptySub: "Add a proxy to forward a domain path to one upstream target.", delTitle: "Delete this proxy?",
       delDesc: "This removes both HTTP and WebSocket rules for this proxy.", saved: "Proxy saved" },
