@@ -4,13 +4,24 @@
  */
 
 const fs = require('fs');
+const fsPromises = fs.promises;
 const path = require('path');
+const crypto = require('crypto');
 const chokidar = require('chokidar');
 const configValidator = require('./config-validator');
 const dataPaths = require('./data-paths');
 
 const { CONFIG_PATH, BACKUP_DIR, IMPORTED_MARKER } = dataPaths;
 const RELOAD_DEBOUNCE_MS = 500;
+
+
+/**
+ * Generate a secure random password (16 characters, base64url encoded)
+ * @returns {string} - Generated password
+ */
+function generateSecurePassword() {
+	return crypto.randomBytes(12).toString('base64url');
+}
 
 class ProxyConfigLoader {
 	constructor() {
@@ -19,6 +30,7 @@ class ProxyConfigLoader {
 		this.isReloading = false;
 		this.reloadTimeout = null;
 		this.watcher = null;
+		this.configPath = CONFIG_PATH;
 
 		// Ensure backup directory exists
 		this.ensureBackupDir();
@@ -48,230 +60,83 @@ class ProxyConfigLoader {
 
 	/**
 	 * Load configuration from file
+	 * @returns {Promise<Object>} - Loaded configuration
 	 */
 	async loadConfiguration() {
 		try {
-			const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
-			const newConfig = JSON.parse(data);
-
-			// Validate configuration
-			const validation = configValidator.validateConfig(newConfig);
-
-			if (!validation.valid) {
-				console.error('⛔ Configuration validation failed:');
-				validation.errors.forEach(error => console.error(`  - ${error}`));
-
-				// If we have an existing valid config, keep using it
-				if (this.config) {
-					console.log('⚠️  Continuing with previous valid configuration');
-					return this.config;
-				} else {
-					throw new Error('Invalid configuration and no previous config to fall back to');
-				}
-			}
-
-			console.log('✅ Configuration loaded successfully');
-			this.config = newConfig;
-
+			const fileContent = await fsPromises.readFile(CONFIG_PATH, 'utf8');
+			this.config = JSON.parse(fileContent);
 			return this.config;
 		} catch (error) {
-			console.error('⛔ Error loading configuration:', error.message);
+			console.error('Failed to load configuration:', error);
+			this.config = {
+				version: '1.0',
+				lastModified: new Date().toISOString(),
+				settings: {},
+				httpProxyRules: [],
+				wsProxyRules: [],
+				sslCertificates: []
+			};
+			return this.config;
+		}
+	}
 
-			// If we have an existing config, keep using it
-			if (this.config) {
-				console.log('⚠️  Continuing with previous valid configuration');
-				return this.config;
-			}
-
+	/**
+	 * Save configuration to file
+	 * @returns {Promise<void>}
+	 */
+	async saveConfiguration() {
+		try {
+			this.config.lastModified = new Date().toISOString();
+			await fsPromises.writeFile(CONFIG_PATH, JSON.stringify(this.config, null, 2));
+			console.log('Configuration saved successfully');
+		} catch (error) {
+			console.error('Failed to save configuration:', error);
 			throw error;
 		}
 	}
 
 	/**
-	 * Start watching configuration file for changes
-	 */
-	startWatching() {
-		if (this.watcher) {
-			return; // Already watching
-		}
-
-		console.log('👁️  Starting configuration file watcher...');
-
-		this.watcher = chokidar.watch(CONFIG_PATH, {
-			persistent: true,
-			ignoreInitial: true
-		});
-
-		this.watcher.on('change', () => {
-			this.scheduleReload();
-		});
-
-		this.watcher.on('error', (error) => {
-			console.error('⛔ Config file watcher error:', error);
-		});
-	}
-
-	/**
-	 * Stop watching configuration file
-	 */
-	stopWatching() {
-		if (this.watcher) {
-			this.watcher.close();
-			this.watcher = null;
-			console.log('👁️  Configuration file watcher stopped');
-		}
-	}
-
-	/**
-	 * Schedule a configuration reload with debouncing
-	 */
-	scheduleReload() {
-		if (this.reloadTimeout) {
-			clearTimeout(this.reloadTimeout);
-		}
-
-		this.reloadTimeout = setTimeout(() => {
-			this.performReload();
-		}, RELOAD_DEBOUNCE_MS);
-	}
-
-	/**
-	 * Perform configuration reload
-	 */
-	async performReload() {
-		if (this.isReloading) {
-			console.log('⏳ Reload already in progress, skipping...');
-			return;
-		}
-
-		this.isReloading = true;
-		console.log('🔄 Configuration file changed, reloading...');
-
-		try {
-			const oldConfig = this.config;
-			const newConfig = await this.loadConfiguration();
-
-			// Check if configuration actually changed
-			if (JSON.stringify(oldConfig) === JSON.stringify(newConfig)) {
-				console.log('ℹ️  Configuration unchanged, skipping reload');
-				return;
-			}
-
-			console.log('✅ Configuration reloaded successfully');
-
-			// Notify all registered callbacks
-			this.reloadCallbacks.forEach(callback => {
-				try {
-					callback(newConfig, oldConfig);
-				} catch (error) {
-					console.error('⛔ Error in reload callback:', error);
-				}
-			});
-		} catch (error) {
-			console.error('⛔ Error during configuration reload:', error);
-		} finally {
-			this.isReloading = false;
-		}
-	}
-
-	/**
-	 * Register a callback to be called when configuration is reloaded
-	 * @param {Function} callback - Function to call with (newConfig, oldConfig)
-	 */
-	onReload(callback) {
-		if (typeof callback === 'function') {
-			this.reloadCallbacks.push(callback);
-		}
-	}
-
-	/**
-	 * Get current configuration
-	 * @returns {Object|null} - Current configuration or null if not loaded
-	 */
-	getConfig() {
-		return this.config;
-	}
-
-	/**
-	 * Get HTTP proxy rules as arrays (for backward compatibility)
-	 * @returns {Object} - Object with arrays matching old environment variable format
-	 */
-	getHttpProxyArrays() {
-		if (!this.config || !this.config.httpProxyRules) {
-			return {
-				protocols: [],
-				domains: [],
-				paths: [],
-				hosts: [],
-				ports: [],
-				pretends: [],
-				redirects: [],
-				users: []
-			};
-		}
-
-		const rules = this.config.httpProxyRules
-			.filter(rule => rule.enabled)
-			.sort((a, b) => a.priority - b.priority);
-
-		return {
-			protocols: rules.map(r => r.protocol),
-			domains: rules.map(r => r.domain || ''),
-			paths: rules.map(r => r.path),
-			hosts: rules.map(r => r.targetHost),
-			ports: rules.map(r => r.targetPort.toString()),
-			pretends: rules.map(r => r.pretendMode.toString()),
-			redirects: rules.map(r => (!!r.redirectToHttps).toString()),
-			users: rules.map(r => r.users || {})
-		};
-	}
-
-	/**
-	 * Get WebSocket proxy rules as arrays (for backward compatibility)
-	 * @returns {Object} - Object with arrays matching old environment variable format
-	 */
-	getWsProxyArrays() {
-		if (!this.config || !this.config.wsProxyRules) {
-			return {
-				protocols: [],
-				domains: [],
-				paths: [],
-				hosts: [],
-				ports: [],
-				pretends: [],
-				users: []
-			};
-		}
-
-		const rules = this.config.wsProxyRules
-			.filter(rule => rule.enabled)
-			.sort((a, b) => a.priority - b.priority);
-
-		return {
-			protocols: rules.map(r => r.protocol),
-			domains: rules.map(r => r.domain || ''),
-			paths: rules.map(r => r.path),
-			hosts: rules.map(r => r.targetHost),
-			ports: rules.map(r => r.targetPort.toString()),
-			pretends: rules.map(r => r.pretendMode.toString()),
-			users: rules.map(r => r.users || {})
-		};
-	}
-
-	/**
 	 * Get settings
-	 * @returns {Object} - Settings object
+	 * @returns {Promise<Object>} - Settings object
 	 */
-	getSettings() {
+	async getSettings() {
 		if (!this.config || !this.config.settings) {
-			return {
+			const generatedPassword = generateSecurePassword();
+			const generatedUsername = 'proxy-user';
+
+			console.log('🔐 Generated random password for default authentication:');
+			console.log(`   Username: ${generatedUsername}`);
+			console.log(`   Password: ${generatedPassword}`);
+			console.log('   These credentials have been saved to the config file.');
+
+			const newSettings = {
 				maxSession: 0,
 				defaultAuth: {
 					enabled: true,
-					username: 'land007',
-					password: 'fcea920f7412b5da7be0cf42b8c93759'
+					username: generatedUsername,
+					password: generatedPassword
 				}
 			};
+
+			// Persist to config file
+			try {
+				const configPath = this.configPath || CONFIG_PATH;
+				const configData = {
+					version: '1.0',
+					lastModified: new Date().toISOString(),
+					settings: newSettings,
+					httpProxyRules: [],
+					wsProxyRules: [],
+					sslCertificates: []
+				};
+				await fsPromises.writeFile(configPath, JSON.stringify(configData, null, 2));
+				console.log(`   Config file updated: ${configPath}`);
+			} catch (error) {
+				console.error('   ⚠️  Failed to save config file:', error.message);
+			}
+
+			return newSettings;
 		}
 
 		return this.config.settings;
@@ -289,6 +154,114 @@ class ProxyConfigLoader {
 		return this.config.sslCertificates;
 	}
 
+	/**
+	 * Get HTTP proxy rules
+	 * @returns {Array} - Array of HTTP proxy rules
+	 */
+	getHttpProxyRules() {
+		if (!this.config || !this.config.httpProxyRules) {
+			return [];
+		}
+
+		return this.config.httpProxyRules;
+	}
+
+	/**
+	 * Get WebSocket proxy rules
+	 * @returns {Array} - Array of WebSocket proxy rules
+	 */
+	getWsProxyRules() {
+		if (!this.config || !this.config.wsProxyRules) {
+			return [];
+		}
+
+		return this.config.wsProxyRules;
+	}
+
+	/**
+	 * Update HTTP proxy rules
+	 * @param {Array} rules - New HTTP proxy rules
+	 * @returns {Promise<void>}
+	 */
+	async updateHttpProxyRules(rules) {
+		if (!this.config) {
+			this.config = await this.loadConfiguration();
+		}
+		this.config.httpProxyRules = rules;
+		await this.saveConfiguration();
+	}
+
+	/**
+	 * Update WebSocket proxy rules
+	 * @param {Array} rules - New WebSocket proxy rules
+	 * @returns {Promise<void>}
+	 */
+	async updateWsProxyRules(rules) {
+		if (!this.config) {
+			this.config = await this.loadConfiguration();
+		}
+		this.config.wsProxyRules = rules;
+		await this.saveConfiguration();
+	}
+
+	/**
+	 * Update SSL certificates
+	 * @param {Array} certs - New SSL certificates
+	 * @returns {Promise<void>}
+	 */
+	async updateSslCertificates(certs) {
+		if (!this.config) {
+			this.config = await this.loadConfiguration();
+		}
+		this.config.sslCertificates = certs;
+		await this.saveConfiguration();
+	}
+
+	/**
+	 * Update settings
+	 * @param {Object} settings - New settings
+	 * @returns {Promise<void>}
+	 */
+	async updateSettings(settings) {
+		if (!this.config) {
+			this.config = await this.loadConfiguration();
+		}
+		this.config.settings = settings;
+		await this.saveConfiguration();
+	}
+
+	/**
+	 * Ensure backup directory exists
+	 */
+	ensureBackupDir() {
+		if (!fs.existsSync(BACKUP_DIR)) {
+			fs.mkdirSync(BACKUP_DIR, { recursive: true });
+		}
+	}
+
+	/**
+	 * Create backup of current configuration
+	 * @returns {Promise<string>} - Path to backup file
+	 */
+	async createBackup() {
+		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+		const backupPath = path.join(BACKUP_DIR, `proxy-config-${timestamp}.json`);
+
+		try {
+			await fsPromises.copyFile(CONFIG_PATH, backupPath);
+			console.log(`Backup created: ${backupPath}`);
+			return backupPath;
+		} catch (error) {
+			console.error('Failed to create backup:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Parse environment variable list
+	 * @param {string} name - Environment variable name
+	 * @returns {Array} - Parsed array
+	 */
 	parseEnvList(name) {
 		if (!process.env[name]) {
 			return [];
@@ -299,6 +272,10 @@ class ProxyConfigLoader {
 			.map(s => s.trim());
 	}
 
+	/**
+	 * Build proxy rules from environment variables
+	 * @returns {Object} - Object with httpProxyRules and wsProxyRules arrays
+	 */
 	buildRulesFromEnv() {
 		const http_proxy_protocols = this.parseEnvList('http_proxy_protocols');
 		const http_proxy_domains = this.parseEnvList('http_proxy_domains');
@@ -357,6 +334,42 @@ class ProxyConfigLoader {
 		return { httpProxyRules, wsProxyRules };
 	}
 
+	/**
+	 * Migrate configuration from environment variables
+	 * @returns {Promise<void>}
+	 */
+	async migrateFromEnv() {
+		const { httpProxyRules, wsProxyRules } = this.buildRulesFromEnv();
+
+		if (httpProxyRules.length === 0 && wsProxyRules.length === 0) {
+			console.log('No proxy rules found in environment variables');
+			return;
+		}
+
+		const config = {
+			version: '1.0',
+			lastModified: new Date().toISOString(),
+			settings: {
+				maxSession: parseInt(process.env.maxSession) || 0,
+				defaultAuth: {
+					enabled: true,
+					username: process.env.username || 'proxy-user',
+					password: process.env.password || ''
+				}
+			},
+			httpProxyRules,
+			wsProxyRules,
+			sslCertificates: []
+		};
+
+		await fsPromises.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+		console.log(`Configuration migrated from environment variables to ${CONFIG_PATH}`);
+	}
+
+	/**
+	 * Import from environment variables once (marked by IMPORTED_MARKER)
+	 * @returns {Promise<void>}
+	 */
 	async importFromEnvOnce() {
 		if (fs.existsSync(IMPORTED_MARKER)) {
 			return;
@@ -367,238 +380,92 @@ class ProxyConfigLoader {
 				!(this.config.wsProxyRules && this.config.wsProxyRules.length);
 			if (empty) {
 				const { httpProxyRules, wsProxyRules } = this.buildRulesFromEnv();
-				if (httpProxyRules.length || wsProxyRules.length) {
+
+				if (httpProxyRules.length > 0 || wsProxyRules.length > 0) {
 					this.config.httpProxyRules = httpProxyRules;
 					this.config.wsProxyRules = wsProxyRules;
-					await this.saveConfiguration(this.config, false);
-					console.log('✅ Imported proxy rules from environment variables');
+					await this.saveConfiguration();
+
+					// Create marker file
+					await fsPromises.writeFile(IMPORTED_MARKER, Date.now().toString());
+					console.log('Configuration imported from environment variables');
 				}
 			}
-			fs.writeFileSync(IMPORTED_MARKER, new Date().toISOString(), 'utf-8');
 		} catch (error) {
-			console.error('⛔ Error during one-time environment import:', error);
-			throw error;
+			console.error('Failed to import from environment:', error);
 		}
 	}
 
 	/**
-	 * Migrate configuration from environment variables to JSON file
+	 * Start watching configuration file for changes
 	 */
-	async migrateFromEnv() {
-		console.log('🔄 Migrating configuration from environment variables...');
-
-		// Get environment variables
-		const username = process.env.username || 'land007';
-		const password = process.env.password || '';
-		const max_session = parseInt(process.env.max_session || '0');
-		const domainName = process.env.DOMAIN_NAME || 'voice.qhkly.com';
-
-		const { httpProxyRules, wsProxyRules } = this.buildRulesFromEnv();
-
-		// Build configuration object
-		const config = {
-			version: '1.0',
-			lastModified: new Date().toISOString(),
-			settings: {
-				maxSession: max_session,
-				defaultAuth: {
-					enabled: true,
-					username: username,
-					password: password
-				}
-			},
-			httpProxyRules,
-			wsProxyRules,
-			sslCertificates: []
-		};
-
-		// Add SSL certificates for detected domains
-		const certDir = dataPaths.CERT_DIR;
-		if (fs.existsSync(certDir)) {
-			const files = fs.readdirSync(certDir);
-			const domains = new Set();
-
-			files.forEach(file => {
-				if (file.endsWith('_chain.crt')) {
-					const domain = file.replace('_chain.crt', '');
-					domains.add(domain);
-				}
-			});
-
-			domains.forEach(domain => {
-				config.sslCertificates.push({
-					domain: domain,
-					certFile: `cert/${domain}_chain.crt`,
-					keyFile: `cert/${domain}_key.key`,
-					expiresAt: null
-				});
-			});
-		}
-
-		// Validate and save
-		const validation = configValidator.validateConfig(config);
-		if (!validation.valid) {
-			console.warn('⚠️  Migrated configuration has validation errors:');
-			validation.errors.forEach(error => console.warn(`  - ${error}`));
-		}
-
-		await this.saveConfiguration(config);
-		console.log('✅ Configuration migrated from environment variables successfully');
-		console.log('⚠️  WARNING: Environment variables will no longer be used');
-		console.log('⚠️  Please use the web UI or edit proxy-config.json directly');
-	}
-
-	/**
-	 * Save configuration to file (with backup)
-	 * @param {Object} config - Configuration to save
-	 * @param {boolean} backup - Whether to create a backup before saving
-	 */
-	async saveConfiguration(config, backup = true) {
-		// Validate before saving
-		const validation = configValidator.validateConfig(config);
-		if (!validation.valid) {
-			throw new Error(`Invalid configuration: ${validation.errors.join(', ')}`);
-		}
-
-		// Create backup if requested
-		if (backup && fs.existsSync(CONFIG_PATH)) {
-			await this.createBackup();
-		}
-
-		// Update timestamp
-		config.lastModified = new Date().toISOString();
-
-		// Write directly to the config file (preserves the inode). A rename-based "atomic"
-		// write breaks Docker single-file bind mounts (e.g. ./proxy-config.json:/node_/proxy-config.json)
-		// with EBUSY and silently fails to persist. A fresh backup is always taken above, so a
-		// direct write is safe here.
-		fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
-
-		this.config = config;
-		console.log('💾 Configuration saved successfully');
-	}
-
-	/**
-	 * Create a backup of the current configuration
-	 */
-	async createBackup() {
-		if (!fs.existsSync(CONFIG_PATH)) {
+	startWatching() {
+		if (this.watcher) {
 			return;
 		}
 
-		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-		const backupPath = path.join(BACKUP_DIR, `proxy-config-${timestamp}.json`);
+		this.watcher = chokidar.watch(CONFIG_PATH, {
+			persistent: true,
+			ignoreInitial: true
+		});
 
-		try {
-			fs.copyFileSync(CONFIG_PATH, backupPath);
-			console.log(`💾 Backup created: ${backupPath}`);
-
-			// Clean up old backups (keep only last 10)
-			await this.cleanOldBackups();
-		} catch (error) {
-			console.error('⛔ Error creating backup:', error);
-		}
+		this.watcher.on('change', () => {
+			this.handleConfigChange();
+		});
 	}
 
 	/**
-	 * Clean up old backups, keeping only the most recent 10
+	 * Handle configuration file change
 	 */
-	async cleanOldBackups() {
-		try {
-			const files = fs.readdirSync(BACKUP_DIR);
-			const backups = files
-				.filter(f => f.startsWith('proxy-config-') && f.endsWith('.json'))
-				.map(f => ({
-					name: f,
-					path: path.join(BACKUP_DIR, f),
-					time: fs.statSync(path.join(BACKUP_DIR, f)).mtime.getTime()
-				}))
-				.sort((a, b) => b.time - a.time);
-
-			// Remove old backups beyond the most recent 10
-			if (backups.length > 10) {
-				const toDelete = backups.slice(10);
-				toDelete.forEach(backup => {
-					fs.unlinkSync(backup.path);
-					console.log(`🗑️  Deleted old backup: ${backup.name}`);
-				});
+	async handleConfigChange() {
+		if (this.isReloading) {
+			if (this.reloadTimeout) {
+				clearTimeout(this.reloadTimeout);
 			}
-		} catch (error) {
-			console.error('⛔ Error cleaning old backups:', error);
-		}
-	}
-
-	/**
-	 * Restore configuration from a backup
-	 * @param {string} backupName - Name of the backup file
-	 */
-	async restoreFromBackup(backupName) {
-		const backupPath = path.join(BACKUP_DIR, backupName);
-
-		if (!fs.existsSync(backupPath)) {
-			throw new Error(`Backup file not found: ${backupName}`);
+			this.reloadTimeout = setTimeout(() => this.handleConfigChange(), RELOAD_DEBOUNCE_MS);
+			return;
 		}
 
-		// Read backup
-		const data = fs.readFileSync(backupPath, 'utf-8');
-		const config = JSON.parse(data);
-
-		// Validate
-		const validation = configValidator.validateConfig(config);
-		if (!validation.valid) {
-			throw new Error(`Invalid backup configuration: ${validation.errors.join(', ')}`);
-		}
-
-		// Create backup of current config before restoring
-		if (fs.existsSync(CONFIG_PATH)) {
-			await this.createBackup();
-		}
-
-		// Restore
-		await this.saveConfiguration(config, false);
-		console.log(`✅ Configuration restored from backup: ${backupName}`);
-	}
-
-	/**
-	 * Get list of available backups
-	 * @returns {Array} - Array of backup file info
-	 */
-	getBackups() {
-		if (!fs.existsSync(BACKUP_DIR)) {
-			return [];
-		}
+		this.isReloading = true;
 
 		try {
-			const files = fs.readdirSync(BACKUP_DIR);
-			return files
-				.filter(f => f.startsWith('proxy-config-') && f.endsWith('.json'))
-				.map(f => {
-					const stat = fs.statSync(path.join(BACKUP_DIR, f));
-					return {
-						name: f,
-						size: stat.size,
-						created: stat.mtime
-					};
-				})
-				.sort((a, b) => b.created - a.created);
+			const oldConfig = this.config;
+			await this.loadConfiguration();
+
+			for (const callback of this.reloadCallbacks) {
+				try {
+					await callback(this.config, oldConfig);
+				} catch (error) {
+					console.error('Error in reload callback:', error);
+				}
+			}
+
+			console.log('Configuration reloaded successfully');
 		} catch (error) {
-			console.error('⛔ Error listing backups:', error);
-			return [];
+			console.error('Failed to reload configuration:', error);
+		} finally {
+			this.isReloading = false;
+			this.reloadTimeout = null;
 		}
 	}
 
 	/**
-	 * Ensure backup directory exists
+	 * Register callback for configuration reloads
+	 * @param {Function} callback - Callback function
 	 */
-	ensureBackupDir() {
-		if (!fs.existsSync(BACKUP_DIR)) {
-			fs.mkdirSync(BACKUP_DIR, { recursive: true });
-			console.log(`📁 Created backup directory: ${BACKUP_DIR}`);
+	onReload(callback) {
+		this.reloadCallbacks.push(callback);
+	}
+
+	/**
+	 * Stop watching configuration file
+	 */
+	stopWatching() {
+		if (this.watcher) {
+			this.watcher.close();
+			this.watcher = null;
 		}
 	}
 }
 
-// Create singleton instance
-const loader = new ProxyConfigLoader();
-
-module.exports = loader;
+module.exports = ProxyConfigLoader;

@@ -236,9 +236,9 @@ app.put('/api/config', requireAuth, async (req, res) => {
  * GET /api/settings
  * Get settings
  */
-app.get('/api/settings', requireAuth, (req, res) => {
+app.get('/api/settings', requireAuth, async (req, res) => {
 	try {
-		const settings = configLoader.getSettings();
+		const settings = await configLoader.getSettings();
 		res.json(settings);
 	} catch (error) {
 		console.error('Error getting settings:', error);
