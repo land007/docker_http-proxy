@@ -185,7 +185,7 @@ function RuleModal({ t, mode, kind, initial, onClose, onSave }) {
         <button className="btn btn-primary" disabled={!valid} onClick={() => onSave(f)}>{t("common.save")}</button>
       </>}>
       <Field label={t("common.domain")} req>
-        <input className="input mono" placeholder="proxy.example.com" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
+        <input className="input mono" placeholder="proxy.example.com（多域名用英文逗号分隔）" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
       </Field>
       <Field label={t("common.description")}>
         <input className="input" placeholder={t("proxy.descriptionPlaceholder")} value={f.description || ""} onChange={(e) => set("description", e.target.value)} />
@@ -308,7 +308,7 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
         <button className="btn btn-primary" disabled={!valid} onClick={() => onSave(f)}>{t("common.save")}</button>
       </>}>
       <Field label={t("common.domain")} req>
-        <input className="input mono" placeholder="proxy.example.com:8443" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
+        <input className="input mono" placeholder="proxy.example.com:8443（多域名用英文逗号分隔）" value={f.domain} onChange={(e) => set("domain", e.target.value)} autoFocus />
       </Field>
       <Field label={t("common.description")}>
         <input className="input" placeholder={t("proxy.descriptionPlaceholder")} value={f.description || ""} onChange={(e) => set("description", e.target.value)} />

@@ -292,6 +292,12 @@ const sendHttpsRedirect = function(req, res) {
 	res.end('Redirecting to HTTPS');
 };
 
+// domain 为空 = 通配（匹配任意 host）；支持逗号分隔的多域名，任一 host 命中即算匹配
+const domainMatches = function(ruleDomain, host) {
+	if (!ruleDomain) return true;
+	return String(ruleDomain).split(',').some(function(d) { return d.trim() === host; });
+};
+
 const buildRuleStatsMeta = function(kind, index) {
 	const protocols = kind === 'ws' ? ws_proxy_protocols : http_proxy_protocols;
 	const domains = kind === 'ws' ? ws_proxy_domains : http_proxy_domains;
@@ -454,7 +460,7 @@ const _requestListener = async function(req, res) {
 	let have_http_proxy_path = false;
 	for (let h in http_proxy_paths) {
 		// 路径及域名验证
-		if (pathname.indexOf(http_proxy_paths[h]) == 0 && (http_proxy_domains[h] == '' || http_proxy_domains[h] == host)) {
+		if (pathname.indexOf(http_proxy_paths[h]) == 0 && domainMatches(http_proxy_domains[h], host)) {
 			// 命中规则即开始统计，包含认证挑战等未转发完成的请求
 			have_http_proxy_path = true;
 			const statsSample = proxyStats.beginHttp(buildRuleStatsMeta('http', h));
@@ -585,7 +591,7 @@ const _upgrade = function(req, socket, head) {
 	}
 	let have_ws_proxy_path = false;
 	for (let w in ws_proxy_paths) {
-		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && (ws_proxy_domains[w] == '' || ws_proxy_domains[w] == host)) {
+		if (pathname.indexOf(ws_proxy_paths[w]) == 0 && domainMatches(ws_proxy_domains[w], host)) {
 			have_ws_proxy_path = true;
 			// 检查登录信息
 			if(!check(req, ws_proxy_users[w], _token)) {
