@@ -352,6 +352,42 @@ const createWsProxy = function(protocol, host, port, pretend) {
 	return httpProxy.createProxyServer(options);
 };
 
+// http-proxy 的 ProxyServer 设计为「创建一次、反复复用」。
+// 原先每个 HTTP 请求和每次 WebSocket 升级都新建一个实例、并各挂一个新的 error 监听器,
+// 实例与其内部状态从不释放 —— 线上表现为进程握着 8.5 万个 fd 而在用连接仅 4.5 千条。
+// 按 target 缓存后, 实例数由配置规则数决定(当前 11 条), 天然有界。
+const proxyPool = new Map();
+const getPooledProxy = function(kind, protocol, host, port, pretend) {
+	const key = `${kind}|${protocol}|${host}|${port}|${pretend ? 1 : 0}`;
+	let proxy = proxyPool.get(key);
+	if (proxy) return proxy;
+	proxy = kind === 'ws'
+		? createWsProxy(protocol, host, port, pretend)
+		: createHttpProxy(protocol, host, port, pretend);
+	// 监听器只在实例创建时挂一次, 不再随请求累积
+	if (kind === 'ws') {
+		proxy.on('error', function(error, req, socket) {
+			console.error('⛔ WS proxy error:', error.message);
+			// 每请求的统计回调挂在 socket 上(见 _upgrade), 池化后不能再用闭包捕获
+			if (socket && typeof socket.__closeStats === 'function') socket.__closeStats(true);
+			// 出错时确保连接被拆掉, 而不是留下永久悬挂的半边
+			if (socket && !socket.destroyed) socket.destroy();
+		});
+	} else {
+		proxy.on('error', function(error, req, res) {
+			console.error('⛔ HTTP proxy error:', error.message);
+			if (res && !res.headersSent) {
+				res.writeHead(502, { 'Content-Type': 'text/plain' });
+			}
+			if (res && !res.writableEnded) {
+				res.end('Proxy error');
+			}
+		});
+	}
+	proxyPool.set(key, proxy);
+	return proxy;
+};
+
 const installResponseByteCounter = function(res, sample) {
 	const originalWrite = res.write;
 	const originalEnd = res.end;
@@ -485,42 +521,24 @@ const _requestListener = async function(req, res) {
 			}
 			// 都检查通过了可以代理
 			if (http_proxy_pretends[h] && http_proxy_pretends[h] == 'true') {
-				let proxy = createHttpProxy(
+//				proxy.on('proxyReq', function(proxyReq, req, res, options) {
+//					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
+//				});
+				getPooledProxy(
+					'http',
 					http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:",
 					http_proxy_hosts[h],
 					http_proxy_ports[h],
 					true
-				);
-				proxy.on('error', function(error, req, res) {
-					console.error('⛔ HTTP proxy error:', error.message);
-					if (res && !res.headersSent) {
-						res.writeHead(502, { 'Content-Type': 'text/plain' });
-					}
-					if (res && !res.writableEnded) {
-						res.end('Proxy error');
-					}
-				});
-//				proxy.on('proxyReq', function(proxyReq, req, res, options) {
-//					proxyReq.setHeader('Host', http_proxy_hosts[h] + ':' + http_proxy_ports[h]);
-//				});
-				proxy.web(req, res);
+				).web(req, res);
 			} else {
-				let proxy = createHttpProxy(
+				getPooledProxy(
+					'http',
 					http_proxy_protocols[h] ? http_proxy_protocols[h] : "http:",
 					http_proxy_hosts[h],
 					http_proxy_ports[h],
 					false
-				);
-				proxy.on('error', function(error, req, res) {
-					console.error('⛔ HTTP proxy error:', error.message);
-					if (res && !res.headersSent) {
-						res.writeHead(502, { 'Content-Type': 'text/plain' });
-					}
-					if (res && !res.writableEnded) {
-						res.end('Proxy error');
-					}
-				});
-				proxy.web(req, res);
+				).web(req, res);
 			}
 			break;
 		}
@@ -549,22 +567,32 @@ const requestListener = function(req, res) {
 };
 
 const netListener = function(socket) {
+	// 连上却一直不发数据的客户端, 原实现会让它永久挂着(没有任何超时)
+	socket.setTimeout(30 * 1000, () => socket.destroy());
 	socket.once('data', function(buf) {
 		consoleLog(buf[0]);
 		// https数据流的第一位是十六进制"16"，转换成十进制就是22
 		let address = buf[0] === 22 ? httpsPort : httpPort;
 		//创建一个指向https或http服务器的链接
 		let proxy = net.createConnection(address, function() {
+			socket.setTimeout(0);
 			proxy.write(buf);
 			//反向代理的过程，tcp接受的数据交给代理链接，代理链接服务器端返回数据交由socket返回给客户端
 			socket.pipe(proxy).pipe(socket);
 		});
+		// 任一端结束都必须销毁另一端。pipe 只传递正常结束, 不传递 error/close,
+		// 原实现在任一端出错时会留下永久悬挂的半边连接。
+		const teardown = () => { socket.destroy(); proxy.destroy(); };
 		proxy.on('error', function(err) {
 			consoleLog(err);
+			teardown();
 		});
+		proxy.on('close', teardown);
+		socket.on('close', teardown);
 	});
 	socket.on('error', function(err) {
 		consoleLog(err);
+		socket.destroy();
 	});
 };
 
@@ -608,30 +636,24 @@ const _upgrade = function(req, socket, head) {
 			};
 			socket.once('close', () => closeStats(false));
 			socket.once('error', () => closeStats(true));
+			// proxy 实例已池化, error 处理器不能再闭包捕获每请求的 closeStats, 改挂在 socket 上
+			socket.__closeStats = closeStats;
 			if (ws_proxy_pretends[w] && ws_proxy_pretends[w] == 'true') {
-				let proxy = createWsProxy(
+				getPooledProxy(
+					'ws',
 					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
 					ws_proxy_hosts[w],
 					ws_proxy_ports[w],
 					true
-				);
-				proxy.on('error', function(error) {
-					console.error('⛔ WS proxy error:', error.message);
-					closeStats(true);
-				});
-				proxy.ws(req, socket, head);
+				).ws(req, socket, head);
 			} else {
-				let proxy = createWsProxy(
+				getPooledProxy(
+					'ws',
 					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
 					ws_proxy_hosts[w],
 					ws_proxy_ports[w],
 					false
-				);
-				proxy.on('error', function(error) {
-					console.error('⛔ WS proxy error:', error.message);
-					closeStats(true);
-				});
-				proxy.ws(req, socket, head);
+				).ws(req, socket, head);
 			}
 			break;
 		}
@@ -655,3 +677,20 @@ consoleLog("listen " + httpPort);
 
 net.createServer(netListener).listen(netPort);
 consoleLog("listen " + netPort);
+
+// 句柄普查 —— 线上曾出现 8.5 万个 fd 而在用连接仅 4.5 千条, 从进程外无法判断这些句柄的类型。
+// 打印出来, 下一轮排查就不必再猜是 Socket、TLSSocket 还是别的。
+// process._getActiveHandles 是非公开 API, 缺失时静默跳过。
+setInterval(() => {
+	if (typeof process._getActiveHandles !== 'function') return;
+	const census = {};
+	for (const h of process._getActiveHandles()) {
+		const n = (h && h.constructor && h.constructor.name) || 'Unknown';
+		census[n] = (census[n] || 0) + 1;
+	}
+	const total = Object.values(census).reduce((a, b) => a + b, 0);
+	console.log('【句柄普查】总计 ' + total + ' | ' +
+		Object.entries(census).sort((a, b) => b[1] - a[1]).slice(0, 8)
+			.map(([k, v]) => k + '=' + v).join(' ') +
+		' | 代理实例池 ' + proxyPool.size);
+}, 5 * 60 * 1000).unref();
