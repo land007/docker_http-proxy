@@ -298,6 +298,10 @@ function App() {
   }, [http, ws]);
 
   const saveProxyEntry = async (next, original) => {
+    // Priority is owned by the list order: keep it when editing, append when creating.
+    const priority = original
+      ? Number(original.priority || 1)
+      : proxyEntries.reduce((max, entry) => Math.max(max, Number(entry.priority || 0)), 0) + 1;
     const shared = {
       enabled: !!next.enabled,
       domain: next.domain || "",
@@ -306,7 +310,7 @@ function App() {
       target: next.target || "",
       pretend: !!next.pretend,
       redirectToHttps: !!next.redirectToHttps,
-      priority: Number(next.priority || 1),
+      priority,
       users: (next.users || []).filter(u => u.username && String(u.username).trim()),
     };
 
@@ -326,6 +330,30 @@ function App() {
       saveOne("ws", original && original._wsId, next.wsEnabled, next.wsProtocol || "WSS"),
     ]);
     await Promise.all([loadHttp(), loadWs(), loadStatus()]);
+  };
+
+  const reorderProxyEntries = async (ordered) => {
+    // Both rules of one entry share the entry's rank, so priorities stay unique per rule list.
+    const ranks = new Map();
+    ordered.forEach((entry, index) => {
+      if (entry._httpId) ranks.set(`http:${entry._httpId}`, index + 1);
+      if (entry._wsId) ranks.set(`ws:${entry._wsId}`, index + 1);
+    });
+    const applyLocal = (rules, kind) => rules.map(r => {
+      const rank = ranks.get(`${kind}:${r.id}`);
+      return rank ? { ...r, priority: rank } : r;
+    });
+    setHttp(rules => applyLocal(rules, "http"));
+    setWs(rules => applyLocal(rules, "ws"));
+    try {
+      await api.post("/api/rules/reorder", {
+        entries: ordered.map(entry => ({ httpId: entry._httpId || null, wsId: entry._wsId || null })),
+      });
+      await Promise.all([loadHttp(), loadWs(), loadStatus()]);
+    } catch (error) {
+      await Promise.all([loadHttp(), loadWs()]);
+      fail(error);
+    }
   };
 
   const deleteProxyEntry = async (entry) => {
@@ -470,7 +498,7 @@ function App() {
         {route === "dashboard" && <DashboardPage t={t} lang={lang} http={http} ws={ws} certs={certs} status={status} go={go}
           openProxy={() => openOn("proxy")} openCert={() => openOn("cert")} createBackup={createBackup} />}
         {route === "proxy" && <ProxyPage t={t} entries={proxyEntries} modalOpen={mOpen("proxy")} setModalOpen={setMOpen("proxy")}
-          save={saveProxyEntry} remove={deleteProxyEntry} toast={toast} />}
+          save={saveProxyEntry} remove={deleteProxyEntry} reorder={reorderProxyEntries} toast={toast} />}
         {route === "cert" && <CertPage t={t} lang={lang} certs={certs} acme={acme} modalOpen={mOpen("cert")} setModalOpen={setMOpen("cert")}
           uploadCert={uploadCert} deleteCert={deleteCert} issueAcme={issueAcme} renewAcme={renewAcme} toast={toast} />}
         {route === "ddns" && <DdnsPage t={t} lang={lang} config={ddns} status={ddnsStatus} providers={ddnsProviders} modalOpen={mOpen("ddns")} setModalOpen={setMOpen("ddns")}

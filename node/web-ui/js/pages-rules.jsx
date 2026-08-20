@@ -345,17 +345,13 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
         <input type="checkbox" checked={!!f.redirectToHttps} onChange={(e) => set("redirectToHttps", e.target.checked)} disabled={!f.httpEnabled} />
         <span>{t("proxy.redirectToHttps")}</span>
       </label>
-      <div className="field-row">
-        <Field label={t("common.priority")}>
-          <input className="input mono" type="number" min="1" value={f.priority} onChange={(e) => set("priority", +e.target.value)} />
-        </Field>
-        <div className="field" style={{ justifyContent: "flex-end" }}>
-          <label className="check"><input type="checkbox" checked={f.pretend} onChange={(e) => set("pretend", e.target.checked)} /><span>{t("http.pretend")}</span></label>
-        </div>
-      </div>
       <label className="check" style={{ marginBottom: 14 }}>
+        <input type="checkbox" checked={f.pretend} onChange={(e) => set("pretend", e.target.checked)} /><span>{t("http.pretend")}</span>
+      </label>
+      <label className="check" style={{ marginBottom: 6 }}>
         <input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /><span>{t("common.enabled")}</span>
       </label>
+      <div className="hint" style={{ marginBottom: 14 }}>{t("proxy.priorityHint")}</div>
 
       <div className="acct-sec">
         <div className="acct-head">
@@ -383,21 +379,57 @@ function ProxyModal({ t, mode, initial, onClose, onSave }) {
   );
 }
 
-function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast }) {
+function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, reorder, toast }) {
   const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const openNew = () => { setEditing(null); setModalOpen(true); };
-  const openEdit = (entry) => { setEditing(entry); setModalOpen(true); };
-  const onSave = async (data) => {
-    await save(data, editing);
-    setModalOpen(false);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
+  const [dragArmed, setDragArmed] = useState(false);
+
+  const closeModal = () => { setModalOpen(false); setEditing(null); setDraft(null); };
+  const openNew = () => { setEditing(null); setDraft(null); setModalOpen(true); };
+  const openEdit = (entry) => { setEditing(entry); setDraft(entry); setModalOpen(true); };
+  const openClone = (entry) => {
     setEditing(null);
+    setDraft({
+      ...entry,
+      id: undefined,
+      _httpId: null,
+      _wsId: null,
+      description: `${entry.description || entry.domain} ${t("proxy.cloneSuffix")}`.trim(),
+      users: (entry.users || []).map(u => ({ ...u })),
+    });
+    setModalOpen(true);
+    toast(t("proxy.cloneHint"));
+  };
+  const entryKey = (e) => [e.domain || "", e.path || "/", e.target || ""].join(" ");
+  const onSave = async (data) => {
+    // A new entry sharing domain+path+target with an existing one would silently merge into it.
+    if (!editing && entries.some(e => entryKey(e) === entryKey(data))) {
+      toast(t("proxy.duplicate"));
+      return;
+    }
+    await save(data, editing);
+    closeModal();
     toast(t("proxy.saved"));
   };
   const onDelete = async () => {
     await remove(confirm);
     setConfirm(null);
     toast(t("toast.deleted"));
+  };
+
+  const clearDrag = () => { setDragIndex(null); setOverIndex(null); setDragArmed(false); };
+  const onDrop = async (target) => {
+    const from = dragIndex;
+    clearDrag();
+    if (from == null || from === target) return;
+    const next = [...entries];
+    const [moved] = next.splice(from, 1);
+    next.splice(target, 0, moved);
+    await reorder(next);
+    toast(t("proxy.reordered"));
   };
 
   return (
@@ -411,16 +443,31 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
               action={<button className="btn btn-primary" onClick={openNew}><Icon name="plus" size={16} />{t("proxy.add")}</button>} />
           : <div className="tablewrap"><table className="table">
             <thead><tr>
-              <th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.description")}</th><th>{t("common.path")}</th>
+              <th className="col-grip" aria-label="order" /><th>{t("common.enabled")}</th><th>{t("common.domain")}</th><th>{t("common.description")}</th><th>{t("common.path")}</th>
               <th>{t("common.target")}</th><th>{t("proxy.protocols")}</th><th>{t("proxy.accounts")}</th>
-              <th>{t("common.priority")}</th><th className="td-right">{t("common.actions")}</th>
+              <th title={t("proxy.priorityHint")}>{t("common.priority")}</th><th className="td-right col-actions">{t("common.actions")}</th>
             </tr></thead>
             <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.id}>
+              {entries.map((entry, index) => (
+                <tr key={entry.id}
+                  draggable={dragArmed}
+                  className={[
+                    dragIndex === index ? "row-dragging" : "",
+                    overIndex === index && dragIndex != null && dragIndex !== index ? (dragIndex > index ? "row-drop-before" : "row-drop-after") : "",
+                  ].filter(Boolean).join(" ")}
+                  onDragStart={(e) => { setDragIndex(index); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(index)); }}
+                  onDragOver={(e) => { if (dragIndex != null) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setOverIndex(index); } }}
+                  onDrop={(e) => { e.preventDefault(); onDrop(index); }}
+                  onDragEnd={clearDrag}>
+                  <td className="col-grip">
+                    <button className="drag-handle" type="button" title={t("proxy.priorityHint")}
+                      onMouseDown={() => setDragArmed(true)} onMouseUp={() => setDragArmed(false)}>
+                      <Icon name="grip" size={16} sw={2.4} />
+                    </button>
+                  </td>
                   <td>{entry.enabled ? <Badge kind="ok">{t("common.enabled")}</Badge> : <Badge kind="neutral">{t("common.disabled")}</Badge>}</td>
                   <td className="mono cell-host">{entry.domain}</td>
-                  <td className="cell-dim">{entry.description || "—"}</td>
+                  <td className="cell-dim cell-desc">{entry.description || "—"}</td>
                   <td className="mono cell-dim">{entry.path || "/"}</td>
                   <td className="mono">{entry.target}</td>
                   <td>
@@ -431,9 +478,10 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
                     </div>
                   </td>
                   <td className="mono">{(entry.users || []).length}</td>
-                  <td className="mono">{entry.priority}</td>
-                  <td><div className="cell-actions">
+                  <td className="mono">{index + 1}</td>
+                  <td className="col-actions"><div className="cell-actions">
                     <button className="btn btn-soft btn-icon" onClick={() => openEdit(entry)} title={t("common.edit")}><Icon name="edit" size={16} /></button>
+                    <button className="btn btn-soft btn-icon" onClick={() => openClone(entry)} title={t("proxy.clone")}><Icon name="copy" size={16} /></button>
                     <button className="btn btn-soft btn-icon" onClick={() => setConfirm(entry)} title={t("common.delete")}><Icon name="trash" size={16} /></button>
                   </div></td>
                 </tr>
@@ -442,7 +490,7 @@ function ProxyPage({ t, entries, modalOpen, setModalOpen, save, remove, toast })
           </table></div>}
       </div>
 
-      {modalOpen && <ProxyModal t={t} mode={editing ? "edit" : "new"} initial={editing} onClose={() => { setModalOpen(false); setEditing(null); }} onSave={onSave} />}
+      {modalOpen && <ProxyModal t={t} mode={editing ? "edit" : "new"} initial={draft} onClose={closeModal} onSave={onSave} />}
       {confirm && <Modal sm onClose={() => setConfirm(null)} title={t("proxy.delTitle")} desc={t("proxy.delDesc")}
         foot={<><button className="btn btn-soft" onClick={() => setConfirm(null)}>{t("common.cancel")}</button>
           <button className="btn btn-danger" onClick={onDelete}><Icon name="trash" size={15} />{t("common.delete")}</button></>}>

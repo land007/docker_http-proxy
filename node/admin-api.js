@@ -510,6 +510,58 @@ app.delete('/api/ws-rules/:id', requireAuth, [
 	}
 });
 
+// ============= Rule Ordering Routes =============
+
+/**
+ * POST /api/rules/reorder
+ * Renumber rule priorities from a UI ordering.
+ * Body: { entries: [{ httpId, wsId }, ...] } — index 0 is the highest priority.
+ * Both rules of one proxy entry share the same rank, so priorities stay unique
+ * within each rule list (the loader only cares about relative order).
+ */
+app.post('/api/rules/reorder', requireAuth, [
+	body('entries').isArray()
+], handleValidationErrors, async (req, res) => {
+	try {
+		const config = configLoader.getConfig();
+		const httpRules = config.httpProxyRules || [];
+		const wsRules = config.wsProxyRules || [];
+
+		const ranks = new Map();
+		req.body.entries.forEach((entry, index) => {
+			if (!entry) {
+				return;
+			}
+			if (entry.httpId) {
+				ranks.set(`http:${entry.httpId}`, index + 1);
+			}
+			if (entry.wsId) {
+				ranks.set(`ws:${entry.wsId}`, index + 1);
+			}
+		});
+
+		// Rules the client did not mention keep their relative order after the listed ones.
+		let overflow = req.body.entries.length;
+		const applyRanks = (rules, kind) => {
+			[...rules]
+				.sort((a, b) => (a.priority || 0) - (b.priority || 0))
+				.forEach(rule => {
+					const rank = ranks.get(`${kind}:${rule.id}`);
+					rule.priority = rank || ++overflow;
+				});
+		};
+		applyRanks(httpRules, 'http');
+		applyRanks(wsRules, 'ws');
+
+		await configLoader.saveConfiguration(config, true);
+
+		res.json({ httpProxyRules: httpRules, wsProxyRules: wsRules });
+	} catch (error) {
+		console.error('Error reordering rules:', error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
 // ============= SSL Certificates Routes =============
 
 /**

@@ -21,7 +21,7 @@ body {
   display: flex; flex-direction: column; padding: 18px 14px;
   position: sticky; top: 0; height: 100vh;
 }
-.main { flex: 1; min-width: 0; padding: 28px 36px 56px; max-width: 1320px; }
+.main { flex: 1; min-width: 0; padding: 28px 36px 56px; max-width: 1720px; }
 
 /* ============ brand + nav ============ */
 .brand { display: flex; align-items: center; gap: 11px; padding: 6px 8px 20px; white-space: nowrap; }
@@ -154,10 +154,31 @@ body {
 .table tbody tr { transition: background .1s; }
 .table tbody tr:hover { background: var(--surface-2); }
 .mono { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: -.01em; }
-.cell-host { color: var(--heading); font-weight: 500; }
+.cell-host { color: var(--heading); font-weight: 500; max-width: 260px; overflow-wrap: anywhere; }
 .cell-dim { color: var(--text-3); }
+.cell-desc { max-width: 180px; overflow-wrap: anywhere; }
 .cell-actions { display: flex; gap: 7px; justify-content: flex-end; }
 .td-right { text-align: right; }
+
+/* actions stay reachable while the table scrolls horizontally */
+.table th.col-actions, .table td.col-actions {
+  position: sticky; right: 0; z-index: 1;
+  background: var(--surface); box-shadow: -8px 0 8px -8px oklch(0 0 0 / 0.18);
+}
+.table th.col-actions { background: var(--surface); }
+.table tbody tr:hover td.col-actions { background: var(--surface-2); }
+
+/* drag-to-reorder rows */
+.table th.col-grip, .table td.col-grip { width: 34px; padding-left: 10px; padding-right: 0; }
+.drag-handle {
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px;
+  color: var(--text-3); cursor: grab; background: none; border: none; padding: 0;
+}
+.drag-handle:hover { background: var(--fill); color: var(--text-2); }
+.drag-handle:active { cursor: grabbing; }
+.row-dragging { opacity: .45; }
+.row-drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
+.row-drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
 /* arrow target */
 .target { display: inline-flex; align-items: center; gap: 8px; }
