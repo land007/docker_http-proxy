@@ -173,7 +173,7 @@ function DashboardPage({ t, lang, http, ws, certs, status, go, openProxy, openCe
 /* ===================== shared rule modal ===================== */
 function RuleModal({ t, mode, kind, initial, onClose, onSave }) {
   const protos = kind === "ws" ? ["WS", "WSS"] : ["HTTP", "HTTPS"];
-  const [f, setF] = useState(initial || { enabled: true, domain: "", description: "", path: "/", target: "", protocol: protos[1], pretend: false, priority: 1 });
+  const [f, setF] = useState(initial || { enabled: true, domain: "", description: "", path: "/", target: "", protocol: protos[0], pretend: false, priority: 1 });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const valid = f.domain.trim() && f.target.trim();
   const tx = kind === "ws" ? "ws" : "http";

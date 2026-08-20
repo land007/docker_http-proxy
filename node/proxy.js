@@ -106,17 +106,12 @@ async function initializeConfiguration() {
 
 		console.log('✅ Configuration loader initialized');
 
-		// Log default authentication credentials for user reference
-		try {
-			const settings = await configLoader.getSettings();
-			if (settings.defaultAuth && settings.defaultAuth.enabled) {
-				console.log('🔐 Default authentication:');
-				console.log(`   Username: ${settings.defaultAuth.username}`);
-				console.log(`   Password: ${settings.defaultAuth.password}`);
-				console.log('   Use these credentials to access the proxy.');
-			}
-		} catch (error) {
-			console.error('Failed to display default auth:', error.message);
+		// Show the credentials needed to reach the proxy, including any generated on first run
+		const settings = configLoader.getSettings();
+		if (settings.defaultAuth && settings.defaultAuth.enabled) {
+			console.log('🔐 Default authentication:');
+			console.log(`   Username: ${settings.defaultAuth.username}`);
+			console.log(`   Password: ${settings.defaultAuth.password}`);
 		}
 	} catch (error) {
 		console.error('⛔ Error initializing configuration loader:', error);
