@@ -13,6 +13,40 @@ const configLoader = require('./proxy-config-loader');
 const proxyStats = require('./proxy-stats');
 const dataPaths = require('./data-paths');
 
+// ── 连接生命周期治理 ──────────────────────────────────────────────
+// 2026-08-23 排查: 线上进程持有 9.5 万个 Socket 句柄, 而内核里实际连接只有 1.1 万条。
+// 其中 8.3 万个是「已从 http.Agent 摘除、内核连接已消失、半关闭、却从未 destroy」的
+// 出站代理 socket, 占掉 1.5G 常驻内存 + 1.2G swap, 并触发过一次整机 OOM。
+// 根因: 代理从头到尾没有设置任何超时, 且出站请求走无上限的 http.globalAgent。
+const PROXY_TIMEOUT_MS = 60 * 1000;        // 等上游响应的上限
+const INCOMING_TIMEOUT_MS = 65 * 1000;     // 入站请求 socket 上限(略大于上游, 免得抢在上游前面超时)
+const SERVER_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+const KEEP_ALIVE_TIMEOUT_MS = 30 * 1000;
+const WS_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // socket.io 默认 25 秒心跳, 10 分钟静默即可判定为死连接
+const WS_KEEPALIVE_MS = 60 * 1000;
+const SWEEP_INTERVAL_MS = 30 * 1000;
+const ORPHAN_GRACE_MS = 60 * 1000;
+
+const AGENT_OPTS = {
+	keepAlive: true,
+	keepAliveMsecs: 30 * 1000,
+	maxSockets: 256,
+	maxFreeSockets: 32,
+	timeout: PROXY_TIMEOUT_MS
+};
+const httpAgent = new http.Agent(AGENT_OPTS);
+const httpsAgent = new https.Agent(Object.assign({}, AGENT_OPTS, { rejectUnauthorized: false }));
+// WS 是长连接, 不能进 keep-alive 复用池
+const wsHttpAgent = new http.Agent({ keepAlive: false, maxSockets: 256 });
+const wsHttpsAgent = new https.Agent({ keepAlive: false, maxSockets: 256, rejectUnauthorized: false });
+const isTlsProtocol = function(protocol) {
+	return protocol === 'https:' || protocol === 'wss:';
+};
+const agentFor = function(kind, protocol) {
+	if (kind === 'ws') return isTlsProtocol(protocol) ? wsHttpsAgent : wsHttpAgent;
+	return isTlsProtocol(protocol) ? httpsAgent : httpAgent;
+};
+
 var nodeSession = new NodeSession({
 	secret: 'Q3UBzdH9GEfiRCTKbi5MTPyChpzXLsTD',
 	'lifetime': 24 * 60 * 60 * 1000,
@@ -338,7 +372,10 @@ const createHttpProxy = function(protocol, host, port, pretend) {
 	const options = {
 		target: buildProxyTarget(protocol, host, port),
 		secure: false,
-		ws: false
+		ws: false,
+		agent: agentFor('http', protocol),
+		proxyTimeout: PROXY_TIMEOUT_MS,
+		timeout: INCOMING_TIMEOUT_MS
 	};
 	if (pretend) {
 		options.autoRewrite = true;
@@ -351,7 +388,10 @@ const createWsProxy = function(protocol, host, port, pretend) {
 	const options = {
 		target: buildProxyTarget(protocol, host, port),
 		secure: false,
-		ws: true
+		ws: true,
+		agent: agentFor('ws', protocol),
+		// 只约束「上游迟迟不完成 upgrade」的情况; 升级成功后 http-proxy 会把超时清零, 不影响长连接
+		proxyTimeout: PROXY_TIMEOUT_MS
 	};
 	if (pretend) {
 		options.autoRewrite = true;
@@ -492,9 +532,9 @@ const check = function(req, users, _token) {
 const _requestListener = async function(req, res) {
 	//let ip = getClientIp(req);
 	let host = req.headers.host;
-    console.log('_requestListener host', host);
+	consoleLog('_requestListener host', host);
 	let pathname = url.parse(req.url).pathname;
-    console.log('_requestListener pathname', pathname);
+	consoleLog('_requestListener pathname', pathname);
 	let _token;
 	if (max_session > 0) {
 		let _session = req.session.all();
@@ -616,9 +656,9 @@ const upgrade = function(req, socket, head) {
 
 const _upgrade = function(req, socket, head) {
 	let host = req.headers.host;
-    console.log('_upgrade host', host);
+	consoleLog('_upgrade host', host);
 	let pathname = url.parse(req.url).pathname;
-    console.log('_upgrade pathname', pathname);
+	consoleLog('_upgrade pathname', pathname);
 	let _token;
 	if (max_session > 0) {
 		let _session = req.session.all();
@@ -646,28 +686,28 @@ const _upgrade = function(req, socket, head) {
 			socket.once('error', () => closeStats(true));
 			// proxy 实例已池化, error 处理器不能再闭包捕获每请求的 closeStats, 改挂在 socket 上
 			socket.__closeStats = closeStats;
-			if (ws_proxy_pretends[w] && ws_proxy_pretends[w] == 'true') {
-				getPooledProxy(
-					'ws',
-					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
-					ws_proxy_hosts[w],
-					ws_proxy_ports[w],
-					true
-				).ws(req, socket, head);
-			} else {
-				getPooledProxy(
-					'ws',
-					ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
-					ws_proxy_hosts[w],
-					ws_proxy_ports[w],
-					false
-				).ws(req, socket, head);
-			}
+			getPooledProxy(
+				'ws',
+				ws_proxy_protocols[w] ? ws_proxy_protocols[w] : "ws:",
+				ws_proxy_hosts[w],
+				ws_proxy_ports[w],
+				ws_proxy_pretends[w] == 'true'
+			).ws(req, socket, head);
+			// http-proxy 的 setupSocket 会把 socket 超时清成 0, 所以只能在 .ws() 之后再设。
+			// 原先死掉的 WS 客户端会永久挂着 —— 入站句柄堆积的一部分。
+			socket.setKeepAlive(true, WS_KEEPALIVE_MS);
+			socket.setTimeout(WS_IDLE_TIMEOUT_MS, function() { socket.destroy(); });
 			break;
 		}
 	}
 	if (!have_ws_proxy_path) {
 		proxyStats.recordUnmatched('ws', 404, 0, 0);
+		// 原先只记一笔统计就把 socket 丢在那里, 永不关闭 ——
+		// 扫描器每打一次不存在的 WS 路径就漏一个句柄。
+		if (socket && !socket.destroyed) {
+			socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+			socket.destroy();
+		}
 	}
 };
 
@@ -676,6 +716,16 @@ var proxyServer = http.createServer(requestListener);
 
 proxysServer.on('upgrade', upgrade);
 proxyServer.on('upgrade', upgrade);
+
+// 入站 socket 原先没有任何空闲超时(server.timeout 自 Node 13 起默认为 0),
+// 客户端悄悄消失的连接会永久占着句柄。线上实测有 9315 个入站句柄,
+// 其中 6205 个内核连接早已消失。
+[proxysServer, proxyServer].forEach(function(server) {
+	server.setTimeout(SERVER_IDLE_TIMEOUT_MS);
+	server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+	server.headersTimeout = KEEP_ALIVE_TIMEOUT_MS + 5000;
+	server.requestTimeout = INCOMING_TIMEOUT_MS + 5000;
+});
 
 proxysServer.listen(httpsPort);
 consoleLog("listen " + httpsPort);
@@ -686,19 +736,46 @@ consoleLog("listen " + httpPort);
 net.createServer(netListener).listen(netPort);
 consoleLog("listen " + netPort);
 
-// 句柄普查 —— 线上曾出现 8.5 万个 fd 而在用连接仅 4.5 千条, 从进程外无法判断这些句柄的类型。
-// 打印出来, 下一轮排查就不必再猜是 Socket、TLSSocket 还是别的。
+// 句柄普查 + 孤儿清扫。
+// 「孤儿」= 还在事件循环里、没 destroy、却已经没有对端(remotePort 为空)的 socket:
+// 内核连接早就没了, 只剩 JS 对象和 fd 挂着。2026-08-23 实测这类占到 82803 个 / 共 95685 个句柄。
+// 连续两轮(相隔 ≥ORPHAN_GRACE_MS)仍是孤儿才动手, 避免误伤正在建连的 socket。
+// 这是兜底 —— 不依赖我们猜对每一处漏 destroy 的代码路径。
 // process._getActiveHandles 是非公开 API, 缺失时静默跳过。
+const orphanFirstSeen = new WeakMap();
 setInterval(() => {
 	if (typeof process._getActiveHandles !== 'function') return;
+	const now = Date.now();
 	const census = {};
+	let orphans = 0;
+	let swept = 0;
 	for (const h of process._getActiveHandles()) {
 		const n = (h && h.constructor && h.constructor.name) || 'Unknown';
 		census[n] = (census[n] || 0) + 1;
+		if (n !== 'Socket' && n !== 'TLSSocket') continue;
+		// 正在建连的 socket 本来就还没有对端, 不能算孤儿
+		if (h.destroyed || h.connecting || h.pending) continue;
+		if (h.remotePort !== undefined) {
+			orphanFirstSeen.delete(h);
+			continue;
+		}
+		orphans += 1;
+		const firstSeen = orphanFirstSeen.get(h);
+		if (firstSeen === undefined) {
+			orphanFirstSeen.set(h, now);
+			continue;
+		}
+		if (now - firstSeen >= ORPHAN_GRACE_MS) {
+			try {
+				h.destroy();
+				swept += 1;
+			} catch (error) { /* 已经在关了 */ }
+		}
 	}
 	const total = Object.values(census).reduce((a, b) => a + b, 0);
 	console.log('【句柄普查】总计 ' + total + ' | ' +
 		Object.entries(census).sort((a, b) => b[1] - a[1]).slice(0, 8)
 			.map(([k, v]) => k + '=' + v).join(' ') +
+		' | 孤儿 ' + orphans + ' 已清 ' + swept +
 		' | 代理实例池 ' + proxyPool.size);
-}, 5 * 60 * 1000).unref();
+}, SWEEP_INTERVAL_MS).unref();
